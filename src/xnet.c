@@ -99,13 +99,18 @@ xnet_create_context() {
     if (!ctx) return NULL;
 
     //xnet_mq_init(&ctx->mq);
-    xnet_poll_init(&ctx->poll);
+    if (xnet_poll_init(&ctx->poll) != 0) {
+        goto FAILED;
+    }
 
     ctx->listen_func = NULL;
     ctx->recv_func = NULL;
     ctx->error_func = NULL;
     ctx->connect_func = NULL;
     return ctx;
+FAILED:
+    free(ctx);
+    return NULL;
 }
 
 void

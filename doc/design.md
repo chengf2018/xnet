@@ -14,7 +14,7 @@ socket listen
 * 实现管道命令机制
 * 实现connect
 
-实现linux平台支持
+* 实现linux平台支持
 定时机制
 优化排版
 多线程支持
@@ -28,3 +28,4 @@ telnet测试通过，完善了一些socket接口
 实现管道命令机制
 4.25
 实现connect
+实现linux平台支持

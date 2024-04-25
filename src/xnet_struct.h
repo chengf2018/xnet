@@ -38,7 +38,8 @@ typedef struct {
 	uint8_t header[8];//实际只用了第7和第8byte，8字节只是为了内存对齐
 	union {
 		uint8_t buffer[256];
-
+		xnet_cmdreq_listen_t listen_req;
+		xnet_cmdreq_close_t close_req;
 	} pkg;
 } xnet_cmdreq_t;
 

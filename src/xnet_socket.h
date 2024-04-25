@@ -4,12 +4,14 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#define POLL_EVENT_MAX 64
+
 #ifdef _WIN32
     //windows head
     #include <winsock2.h>
     #include <ws2tcpip.h>
     #define SOCKET_TYPE SOCKET
-    #define POLL_EVENT_MAX 64
+    
     #define AGAIN_WOULDBLOCK WSAEWOULDBLOCK
     typedef int socklen_t;
 #else
@@ -19,10 +21,9 @@
     #include <arpa/inet.h>
     #include <unistd.h>
     #include <fcntl.h>
+    #include <netdb.h>
 
     #define SOCKET_TYPE int
-    #define EPOLL_EVENT_MAX 64
-    #define POLL_EVENT_MAX EPOLL_EVENT_MAX
 #endif
 
 #define MIN_READ_SIZE 512
@@ -70,6 +71,9 @@ typedef struct {
     bool read[POLL_EVENT_MAX];
     bool write[POLL_EVENT_MAX];
     bool error[POLL_EVENT_MAX];
+#ifndef _WIN32
+    bool eof[POLL_EVENT_MAX];
+#endif
     int n;
 } xnet_poll_event_t;
 
@@ -92,7 +96,7 @@ typedef struct {
     /*todo：select模型需要记录socket列表，检测socket触发只能遍历整个socket列表*/
 #else
     SOCKET_TYPE epoll_fd;
-    struct epoll_event event[EPOLL_EVENT_MAX];
+    struct epoll_event event[POLL_EVENT_MAX];
 #endif
     xnet_socket_t slots[MAX_CLIENT_NUM];
     int slot_index;
@@ -108,7 +112,7 @@ typedef struct {
 
 int xnet_socket_init();
 int xnet_socket_deinit();
-void xnet_poll_init(xnet_poll_t *poll);
+int xnet_poll_init(xnet_poll_t *poll);
 int xnet_poll_addfd(xnet_poll_t *poll, SOCKET_TYPE fd, int id);
 int xnet_poll_closefd(xnet_poll_t *poll, xnet_socket_t *s);
 int xnet_poll_wait(xnet_poll_t *poll);//进行io等待，触发后返回触发的socket列表，保存在poll->event中

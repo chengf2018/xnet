@@ -7,64 +7,9 @@
 
 
 #ifdef _WIN32
-
-#define XNET_EINTR WSAEINTR
-#define XNET_WOULDBLOCK WSAEWOULDBLOCK
-//windows下没有pipe函数，模拟实现一个
-static int
-pipe(int pipefd[2]) {
-    SOCKET_TYPE listener = socket(AF_INET, SOCK_STREAM, 0);
-    struct sockaddr_in addr = {0};
-    socklen_t addrlen = sizeof(addr);
-    int reuse = 1;
-
-    if (listener == INVALID_SOCKET) {
-        return -1;
-    }
-
-    // 创建监听 socket
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    addr.sin_port = 0;  // 让系统自动分配一个端口
-
-    if (setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse)) == -1 ||
-        bind(listener, (struct sockaddr*)&addr, sizeof(addr)) == -1 ||
-        listen(listener, 1) == -1 ||
-        getsockname(listener, (struct sockaddr*)&addr, &addrlen) == -1) {
-        closesocket(listener);
-        return -1;
-    }
-
-    // 创建用于写入的 socket
-    pipefd[1] = socket(AF_INET, SOCK_STREAM, 0);
-    if (pipefd[1] == -1) {
-        closesocket(listener);
-        return -1;
-    }
-
-    // 连接到监听 socket
-    if (connect(pipefd[1], (struct sockaddr*)&addr, sizeof(addr)) == -1) {
-        closesocket(listener);
-        return -1;
-    }
-
-    // 接受连接，创建用于读取的 socket
-    pipefd[0] = accept(listener, NULL, NULL);
-    if (pipefd[0] == -1) {
-        closesocket(pipefd[1]);
-        pipefd[1] = -1;
-        closesocket(listener);
-        return -1;
-    }
-
-    closesocket(listener);
-    return 0;
-}
-
+    #include "socket_win.h"
 #else
-    #define closesocket close
-    #define XNET_EINTR EINTR
-    #define XNET_WOULDBLOCK AGAIN_WOULDBLOCK
+    #include "socket_linux.h"
 #endif
 
 static int
@@ -108,51 +53,6 @@ printf("new_fd 33333\n");
     xnet_enable_read(poll, s, reading);
 printf("new_fd 44444\n");
     return s;
-}
-
-static void
-add_to_socketlist(xnet_poll_t *poll, SOCKET_TYPE fd, int id) {
-    dlink_node_t *new_node = (dlink_node_t *)malloc(sizeof(dlink_node_t));
-    if (!new_node) return;
-
-    new_node->fd = fd;
-    new_node->sock_id = id;
-    new_node->last = NULL;
-    //插到头部
-    if (poll->socket_list) {
-        new_node->next = poll->socket_list;
-        poll->socket_list->last = new_node;
-        poll->socket_list = new_node;
-    } else {
-        poll->socket_list = new_node;
-        new_node->next = NULL;
-    }
-}
-
-static void
-del_socketlist(xnet_poll_t *poll, dlink_node_t *node) {
-    if (node->last) {
-        node->last->next = node->next;
-    }
-    if (node->next) {
-        node->next->last = node->last;
-    }
-    if (node == poll->socket_list) {
-        poll->socket_list = node->next;
-    }
-    free(node);
-}
-
-static void
-find_del_socketlist(xnet_poll_t *poll, SOCKET_TYPE fd) {
-    dlink_node_t *p = poll->socket_list;
-    while (p) {
-        if (p->fd == fd) {
-            del_socketlist(poll, p);
-            break;
-        }
-        p = p->next;
-    }
 }
 
 static void
@@ -211,20 +111,10 @@ xnet_socket_deinit() {
     return 0;
 }
 
-void
+int
 xnet_poll_init(xnet_poll_t *poll) {
     int i;
     xnet_socket_t *s;
-#ifdef _WIN32
-    //select
-    FD_ZERO(&poll->readfds);
-    FD_ZERO(&poll->writefds);
-    FD_ZERO(&poll->errorfds);
-
-    poll->socket_list = NULL;
-#else
-    //epoll
-#endif
 
     poll->slot_index = 0;
     for (i=0; i<MAX_CLIENT_NUM; i++) {
@@ -237,19 +127,32 @@ xnet_poll_init(xnet_poll_t *poll) {
 
     //pipe
     SOCKET_TYPE fd[2];
-    if (pipe(fd)) {
-        //error
-        return;
-    }
-
+    if (pipe(fd))
+        return -1;
     poll->recv_fd = fd[0];
     poll->send_fd = fd[1];
     FD_ZERO(&poll->rfds);
-#ifdef _WIN32
-    FD_SET(fd[0], &poll->readfds);
-#else
 
+#ifdef _WIN32
+    //select
+    FD_ZERO(&poll->readfds);
+    FD_ZERO(&poll->writefds);
+    FD_ZERO(&poll->errorfds);
+    FD_SET(fd[0], &poll->readfds);
+    poll->socket_list = NULL;
+#else
+    //epoll
+    poll->epoll_fd = epoll_create(1024);
+    if (poll->epoll_fd == -1) {
+        closesocket(fd[0]);
+        closesocket(fd[1]);
+        return -1;
+    }
+
+    poll_add(poll->epoll_fd, fd[0], NULL);
 #endif
+
+    return 0;
 }
 
 int
@@ -260,6 +163,8 @@ xnet_poll_addfd(xnet_poll_t *poll, SOCKET_TYPE fd, int id) {
     add_to_socketlist(poll, fd, id);
 #else
     //epoll
+    xnet_socket_t *s = &poll->slots[id];
+    poll_add(poll->epoll_fd, fd, s);
 #endif
 }
 
@@ -274,6 +179,7 @@ xnet_poll_closefd(xnet_poll_t *poll, xnet_socket_t *s) {
 
 #else
     //epoll
+    poll_del(poll->epoll_fd, s->fd);
 #endif
     closesocket(s->fd);
 
@@ -284,56 +190,19 @@ xnet_poll_closefd(xnet_poll_t *poll, xnet_socket_t *s) {
     clear_wb_list(&s->wb_list);
 }
 
-
-
 int
 xnet_enable_read(xnet_poll_t *poll, xnet_socket_t *s, bool enable) {
-#ifdef _WIN32
-    if (s->reading != enable) {
-        s->reading = enable;
-        if (enable) {
-            FD_SET(s->fd, &poll->readfds);
-        } else {
-            FD_CLR(s->fd, &poll->readfds);
-        }
-    }
-    return 0;
-#else
-#endif
+    return poll_enable_read(poll, s, enable);
 }
 
 int
 xnet_enable_write(xnet_poll_t *poll, xnet_socket_t *s, bool enable) {
-#ifdef _WIN32
-    if (s->writing != enable) {
-        s->writing = enable;
-        if (enable) {
-            FD_SET(s->fd, &poll->writefds);
-        } else {
-            FD_CLR(s->fd, &poll->writefds);
-        }
-    }
-    return 0;
-#else
-#endif
+    return poll_enable_write(poll, s, enable);
 }
 
 void
 set_nonblocking(SOCKET_TYPE fd) {
-#ifdef _WIN32
-    u_long mode = 1;
-    int result = ioctlsocket(fd, FIONBIO, &mode);
-    if (result != NO_ERROR) {
-        printf("set_nonblocking error:%d\n", fd);
-    }
-#else
-    int flag = fcntl(fd, F_GETFL, 0);
-    if ( -1 == flag ) {
-        return;
-    }
-    if (!(flag & O_NONBLOCK))
-        fcntl(fd, F_SETFL, flag | O_NONBLOCK);
-#endif
+    poll_set_nonblocking(fd);
 }
 
 void
@@ -342,10 +211,6 @@ set_keepalive(SOCKET_TYPE fd) {
     setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, (void *)&keepalive , sizeof(keepalive));  
 }
 
-static void
-xnet_poll_event_reset(xnet_poll_event_t *poll_event) {
-    memset(poll_event, 0, sizeof(xnet_poll_event_t));
-}
 
 /*
 xnet_poll_wait会将触发事件的socket列表加入到poll_event数组中，
@@ -353,58 +218,8 @@ xnet_poll_wait会将触发事件的socket列表加入到poll_event数组中，
 */
 int
 xnet_poll_wait(xnet_poll_t *poll) {
-#ifdef _WIN32
-    //select
-    dlink_node_t *p;
-    xnet_poll_event_t *poll_event = &poll->poll_event;
-    int n = 0, activity;
-    int have_read, have_write, have_error;
-    xnet_socket_t *s;
-    fd_set readfds, writefds, errorfds;
-
-    readfds = poll->readfds;
-    writefds = poll->writefds;
-    errorfds = poll->errorfds;
-    activity = select(0, &readfds, 
-                &writefds, &errorfds, NULL);
-    if (activity == -1)
-        return -1;
-
-    xnet_poll_event_reset(poll_event);
-
-//select 模式需要遍历socket_list检查是否有触发
-    p = poll->socket_list;
-    while (p) {
-        s = &poll->slots[p->sock_id];
-        have_read = false;
-        have_write = false;
-        have_error = false;
-        if (FD_ISSET(p->fd, &readfds))
-            have_read = true;
-        if (FD_ISSET(p->fd, &writefds))
-            have_write = true;
-        if (FD_ISSET(p->fd, &errorfds))
-            have_error = true;
-
-        if (have_read || have_write || have_error) {
-            poll_event->s[n] = s;
-            poll_event->read[n] = have_read;
-            poll_event->write[n] = have_write;
-            poll_event->error[n] = have_error;
-            n++;
-            if (n >= POLL_EVENT_MAX)
-                break;
-        }
-        
-        p = p->next;
-    }
-    poll_event->n = n;
-#else
-    //epoll
-#endif
-    return n;
+    return poll_wait(poll);
 }
-
 
 
 int
