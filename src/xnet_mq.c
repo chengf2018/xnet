@@ -45,7 +45,7 @@ xnet_mq_push(xnet_mq_t *mq, xnet_message_t *message) {
 xnet_message_t *
 xnet_mq_pop(xnet_mq_t *mq) {
 	xnet_mq_elem_t *mq_head;
-	xnet_message_t *head
+	xnet_message_t *head;
 	
 	if (!mq->tail) return NULL;
 

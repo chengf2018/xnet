@@ -1,10 +1,30 @@
 #include "xnet.h"
+#include <assert.h>
 
 #define CMD_TYPE_EXIT 0
 #define CMD_TYPE_LISTEN 1
 #define CMD_TYPE_CLOSE 2
 #define CMD_TYPE_CONNECT 3
 #define CMD_TYPE_SNED_TCP_PKG 4
+
+static void
+update_time_cache(xnet_context_t *ctx) {
+    ctx->nowtime = get_time();
+}
+
+static void
+deal_with_timeout_event(xnet_context_t *ctx) {
+    xnet_timeinfo_t ti;
+    uint64_t nowtime;
+    if (!ctx->timeout_func) return;
+    nowtime = ctx->nowtime;
+
+    while (xnet_timeheap_top(&ctx->th, &ti)) {
+        if (ti.expire > nowtime) break;
+        xnet_timeheap_pop(&ctx->th, NULL);
+        ctx->timeout_func(ctx, ti.id);
+    }
+}
 
 static void
 cmd_listen(xnet_context_t *ctx, xnet_cmdreq_listen_t *req) {
@@ -102,11 +122,14 @@ xnet_create_context() {
     if (xnet_poll_init(&ctx->poll) != 0) {
         goto FAILED;
     }
+    xnet_timeheap_init(&ctx->th);
+    update_time_cache(ctx);
 
     ctx->listen_func = NULL;
     ctx->recv_func = NULL;
     ctx->error_func = NULL;
     ctx->connect_func = NULL;
+    ctx->timeout_func = NULL;
     return ctx;
 FAILED:
     free(ctx);
@@ -115,6 +138,7 @@ FAILED:
 
 void
 xnet_release_context(xnet_context_t *ctx) {
+    xnet_timeheap_release(&ctx->th);
     free(ctx);
 }
 
@@ -136,6 +160,41 @@ xnet_register_listener(xnet_context_t *ctx, int port, xnet_listen_func_t listen_
     return 0;
 }
 
+void
+xnet_register_connected(xnet_context_t *ctx, xnet_connect_func_t connect_func) {
+    ctx->connect_func = connect_func;
+}
+
+void
+xnet_register_timeout(xnet_context_t *ctx, xnet_timeout_func_t timeout_func) {
+    ctx->timeout_func = timeout_func;
+}
+
+int
+xnet_add_timer(xnet_context_t *ctx, int id, int timeout) {
+    if (timeout < 0) return -1;
+    assert(ctx->timeout_func);
+    uint64_t expire = ctx->nowtime + (uint64_t)timeout;
+    xnet_timeheap_push(&ctx->th, &(xnet_timeinfo_t){id, expire});
+    return 0;
+}
+
+int
+xnet_listen(xnet_context_t *ctx, int port, xnet_socket_t **socket_out) {
+    return xnet_listen_tcp_socket(&ctx->poll, port, socket_out);
+}
+
+int
+xnet_connect(xnet_context_t *ctx, char *host, int port, xnet_socket_t **socket_out) {
+    return xnet_connect_tcp_socket(&ctx->poll, host, port, socket_out);
+}
+
+void
+xnet_close_socket(xnet_context_t *ctx, xnet_socket_t *s) {
+    //主动关闭连接
+    xnet_poll_closefd(&ctx->poll, s);
+}
+
 int
 xnet_dispatch_loop(xnet_context_t *ctx) {
     int ret, i;
@@ -143,6 +202,8 @@ xnet_dispatch_loop(xnet_context_t *ctx) {
     xnet_poll_t *poll = &ctx->poll;
     xnet_socket_t *s, *ns;
     char *buffer;
+    xnet_timeinfo_t ti;
+    int timeout = -1;
 
     while (1) {
         if (has_cmd(ctx)) {
@@ -153,29 +214,42 @@ xnet_dispatch_loop(xnet_context_t *ctx) {
             }
         }
 
-        ret = xnet_poll_wait(poll);
+        //处理定时事件
+        update_time_cache(ctx);
+        deal_with_timeout_event(ctx);
+
+        if (xnet_timeheap_top(&ctx->th, &ti)) {
+            assert(ti.expire > ctx->nowtime);
+            timeout = (int)(ti.expire - ctx->nowtime);
+        } else {
+            timeout = -1;
+        }
+
+        ret = xnet_poll_wait(poll, timeout);
         if (ret < 0) {
             //have error?
             printf("xnet_poll_wait error:%d\n", ret);
             continue;
         }
-        //处理定时事件
-        //... do deal with timieout event
 
         //对触发的事件进行处理
         for (i=0; i<poll_event->n; i++) {
             s = poll_event->s[i];
-
-            if (poll_event->read[i]) {
-                //输入缓存区有可读数据；处于监听状态，有连接到达；出错
-                if (s->type == SOCKET_TYPE_LISTENING) {
-                    ns = NULL;
-                    if (xnet_accept_tcp_socket(poll, s, &ns) == 0) {
-                        ctx->listen_func(ctx, s, ns);
-                    } else {
-                        printf("accept tcp socket have error:%d\n", s->id);
-                    }
+            if (s->type == SOCKET_TYPE_LISTENING) {
+                ns = NULL;
+                if (xnet_accept_tcp_socket(poll, s, &ns) == 0) {
+                    ctx->listen_func(ctx, s, ns);
                 } else {
+                    printf("accept tcp socket have error:%d\n", s->id);
+                }
+            } else if(s->type == SOCKET_TYPE_CONNECTING) {
+                s->type = SOCKET_TYPE_CONNECTED;
+                xnet_enable_write(poll, s, false);
+                ctx->connect_func(ctx, s);
+            } else {
+                if (poll_event->read[i]) {
+                    //输入缓存区有可读数据；处于监听状态，有连接到达；出错
+                    printf("read event[%d]\n", s->id);
                     ret = xnet_recv_data(poll, s, &buffer);
                     if (ret > 0) {
                         ctx->recv_func(ctx, s, buffer, ret);
@@ -185,26 +259,29 @@ xnet_dispatch_loop(xnet_context_t *ctx) {
                         xnet_poll_closefd(poll, s);
                     }
                 }
-            }
 
-            if (poll_event->write[i]) {
-                //输出缓冲区可写；连接成功
-                if (s->type == SOCKET_TYPE_CONNECTING) {
-                    s->type = SOCKET_TYPE_CONNECTED;
-                    xnet_enable_write(poll, s, false);
-                    ctx->connect_func(ctx, s);
-                } else {
+                if (poll_event->write[i]) {
+                    //输出缓冲区可写；连接成功
                     //发送缓冲列表内的数据
+                    printf("write event[%d]\n", s->id);
                     xnet_send_data(&ctx->poll, s);
                     //ctx->send_func(ctx, s);发送成功通知？暂时不需要
                 }
-            }
 
-            if (poll_event->error[i]) {
-                //异常；带外数据
-                printf("poll event error:%d\n", s->id);
-                ctx->error_func(ctx, s, 1);
-                xnet_poll_closefd(&ctx->poll, s);
+                if (poll_event->error[i]) {
+                    //异常；带外数据
+                    printf("poll event error:%d\n", s->id);
+                    ctx->error_func(ctx, s, 1);
+                    xnet_poll_closefd(&ctx->poll, s);
+                }
+#ifndef _WIN32
+                if (poll_event->eof[i]) {
+                    //epoll特有的标记
+                    printf("poll event eof:%d\n", s->id);
+                    ctx->error_func(ctx, s, 2);
+                    xnet_poll_closefd(&ctx->poll, s);
+                }
+#endif
             }
         }
     }

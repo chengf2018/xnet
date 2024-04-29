@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include "xnet_mq.h"
 #include "xnet_socket.h"
+#include "xnet_timeheap.h"
 
 struct xnet_context_t;
 
@@ -13,17 +14,21 @@ typedef void (*xnet_listen_func_t)(struct xnet_context_t *ctx, xnet_socket_t *s,
 typedef void (*xnet_recv_func_t)(struct xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int size);
 //typedef void (*xnet_send_func_t)(struct xnet_context_t *, xnet_socket_t *);
 typedef void (*xnet_error_func_t)(struct xnet_context_t *ctx, xnet_socket_t *s, short what);
+typedef void (*xnet_timeout_func_t)(struct xnet_context_t *ctx, int id);
 
 
 typedef struct xnet_context_t{
 	//xnet_mq_t mq;
 	xnet_poll_t poll;
+	xnet_timeheap_t th;
+	uint64_t nowtime;
 
 	xnet_listen_func_t listen_func;
 	xnet_recv_func_t recv_func;
 	//xnet_send_func_t send_func;
-	xnet_error_func_t error_func;
+	xnet_error_func_t error_func;//socket关闭和发生错误都统一回调这个方法
 	xnet_connect_func_t connect_func;
+	xnet_timeout_func_t timeout_func;
 } xnet_context_t;
 
 typedef struct {

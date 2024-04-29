@@ -13,11 +13,12 @@ socket listen
 * error改为跨平台
 * 实现管道命令机制
 * 实现connect
-
 * 实现linux平台支持
-定时机制
+* 定时机制
+
 优化排版
 多线程支持
+半关闭机制（主动关闭前先推送完队列中的数据）
 
 4.18
 实现发数据功能（wb_list/xnet_send_data）
@@ -29,3 +30,11 @@ telnet测试通过，完善了一些socket接口
 4.25
 实现connect
 实现linux平台支持
+4.27
+完善linux平台支持
+4.28
+完成timeheap
+完成定时机制
+完成win平台下定时机制的测试
+4.29
+1.完成linux平台下定时机制的测试

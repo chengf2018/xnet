@@ -2,7 +2,7 @@
 #define _SOCKET_WIN_H_
 
 #define XNET_EINTR WSAEINTR
-#define XNET_WOULDBLOCK WSAEWOULDBLOCK
+#define XNET_HAVR_WOULDBLOCK(err) (err == WSAEWOULDBLOCK)
 
 //windows下没有pipe函数，模拟实现一个
 static int
@@ -136,7 +136,7 @@ poll_set_nonblocking(SOCKET_TYPE fd) {
 }
 
 static int
-poll_wait(xnet_poll_t *poll) {
+poll_wait(xnet_poll_t *poll, int timeout) {
     //select
     dlink_node_t *p;
     xnet_poll_event_t *poll_event = &poll->poll_event;
@@ -144,12 +144,18 @@ poll_wait(xnet_poll_t *poll) {
     int have_read, have_write, have_error;
     xnet_socket_t *s;
     fd_set readfds, writefds, errorfds;
+    struct timeval tv;
+
+    if (timeout > 0) {
+        tv.tv_sec = timeout / 1000;
+        tv.tv_usec = (timeout % 1000)*1000;
+    }
 
     readfds = poll->readfds;
     writefds = poll->writefds;
     errorfds = poll->errorfds;
-    activity = select(0, &readfds, 
-                &writefds, &errorfds, NULL);
+    activity = select(0, &readfds,&writefds, &errorfds,
+        (timeout > 0) ? &tv : NULL);
     if (activity == -1)
         return -1;
 

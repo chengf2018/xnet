@@ -215,12 +215,12 @@ set_keepalive(SOCKET_TYPE fd) {
 /*
 xnet_poll_wait会将触发事件的socket列表加入到poll_event数组中，
 每次最多触发POLL_EVENT_MAX个socket
+timeout:超时时间，单位毫秒，0为不设定超时
 */
 int
-xnet_poll_wait(xnet_poll_t *poll) {
-    return poll_wait(poll);
+xnet_poll_wait(xnet_poll_t *poll, int timeout) {
+    return poll_wait(poll, timeout);
 }
-
 
 int
 xnet_listen_tcp_socket(xnet_poll_t *poll, int port, xnet_socket_t **socket_out) {
@@ -228,6 +228,7 @@ xnet_listen_tcp_socket(xnet_poll_t *poll, int port, xnet_socket_t **socket_out) 
     SOCKET_TYPE fd = 0;
     xnet_socket_t *s;
     int id;
+    int reuse = 1;
 
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_addr.s_addr = INADDR_ANY;
@@ -235,6 +236,11 @@ xnet_listen_tcp_socket(xnet_poll_t *poll, int port, xnet_socket_t **socket_out) 
 
     fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd == -1) goto FAILED;
+
+    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (void *)&reuse, sizeof(int)) == -1) {
+        goto FAILED;
+    }
+
     if (bind(fd, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == -1)
         goto FAILED;
     if (listen(fd, 5) == -1) goto FAILED;
@@ -364,7 +370,7 @@ xnet_recv_data(xnet_poll_t *poll, xnet_socket_t *s, char **out_data) {
         free(buffer);
         err = get_last_error();
 
-        if (err != XNET_WOULDBLOCK && err != XNET_EINTR) {
+        if (!XNET_HAVR_WOULDBLOCK(err) && err != XNET_EINTR) {
             printf("xnet_recv_data error: %d\n", err);
             return -1;
         }
@@ -398,7 +404,7 @@ xnet_send_data(xnet_poll_t *poll, xnet_socket_t *s) {
             if (n < 0) {
                 err = get_last_error();
                 if (err == XNET_EINTR) continue;
-                if (err == XNET_WOULDBLOCK) return -1;
+                if (XNET_HAVR_WOULDBLOCK(err)) return -1;
                 xnet_enable_write(poll, s, false);
                 return -1;
             }

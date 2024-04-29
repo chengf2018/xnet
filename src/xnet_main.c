@@ -14,6 +14,17 @@ static void
 recv_func(struct xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int size) {
 	printf("-----socket [%d] recv buffer, size[%d]\n", s->id, size);
 	xnet_send_buffer(ctx, s, buffer, size);
+    printf("-----socket [%d] recv finish\n", s->id);
+}
+
+static void
+timeout_func(struct xnet_context_t *ctx, int id) {
+    static uint64_t last_time = 0;
+
+    printf("timeout event[%d], nowtime:%llu, nowtime2:%llu,nowtime3:%llu\n", id, ctx->nowtime, get_time(), last_time);
+    xnet_add_timer(ctx, id, 2000);
+
+    last_time = get_time();
 }
 
 int
@@ -33,6 +44,9 @@ printf("start run1111\n");
     ret = xnet_register_listener(ctx, 8888, listen_func, error_func, recv_func);
     if (ret != 0) goto _END;
 printf("start run2222\n");
+    xnet_register_timeout(ctx, timeout_func);
+    xnet_add_timer(ctx, 1, 2000);
+
 	xnet_dispatch_loop(ctx);
 printf("start run3333\n");
 _END:

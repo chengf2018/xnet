@@ -11,8 +11,7 @@
     #include <winsock2.h>
     #include <ws2tcpip.h>
     #define SOCKET_TYPE SOCKET
-    
-    #define AGAIN_WOULDBLOCK WSAEWOULDBLOCK
+
     typedef int socklen_t;
 #else
     //linux head
@@ -115,7 +114,7 @@ int xnet_socket_deinit();
 int xnet_poll_init(xnet_poll_t *poll);
 int xnet_poll_addfd(xnet_poll_t *poll, SOCKET_TYPE fd, int id);
 int xnet_poll_closefd(xnet_poll_t *poll, xnet_socket_t *s);
-int xnet_poll_wait(xnet_poll_t *poll);//进行io等待，触发后返回触发的socket列表，保存在poll->event中
+int xnet_poll_wait(xnet_poll_t *poll, int timeout);//进行io等待，触发后返回触发的socket列表，保存在poll->event中
 
 int xnet_enable_read(xnet_poll_t *poll, xnet_socket_t *s, bool enable);
 int xnet_enable_write(xnet_poll_t *poll, xnet_socket_t *s, bool enable);
