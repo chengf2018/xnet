@@ -41,7 +41,9 @@ printf("start run\n");
     ctx = xnet_create_context();
 
 printf("start run1111\n");
-    ret = xnet_register_listener(ctx, 8888, listen_func, error_func, recv_func);
+    xnet_register_listener(ctx, listen_func, error_func, recv_func);
+
+    ret = xnet_listen(ctx, 8888, NULL);
     if (ret != 0) goto _END;
 printf("start run2222\n");
     xnet_register_timeout(ctx, timeout_func);

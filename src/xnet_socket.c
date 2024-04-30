@@ -211,11 +211,10 @@ set_keepalive(SOCKET_TYPE fd) {
     setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, (void *)&keepalive , sizeof(keepalive));  
 }
 
-
 /*
 xnet_poll_wait会将触发事件的socket列表加入到poll_event数组中，
 每次最多触发POLL_EVENT_MAX个socket
-timeout:超时时间，单位毫秒，0为不设定超时
+timeout:超时时间，单位毫秒，-1为不设定超时
 */
 int
 xnet_poll_wait(xnet_poll_t *poll, int timeout) {
@@ -309,9 +308,9 @@ xnet_connect_tcp_socket(xnet_poll_t *poll, char *host, int port, xnet_socket_t *
 
     for (ai_ptr = ai_list; ai_ptr != NULL; ai_ptr = ai_ptr->ai_next) {
         sock = socket(ai_ptr->ai_family, ai_ptr->ai_socktype, ai_ptr->ai_protocol);
-        if (sock < 0) {
+        if (sock < 0)
             continue;
-        }
+
         set_keepalive(sock);
         set_nonblocking(sock);
         status = connect(sock, ai_ptr->ai_addr, ai_ptr->ai_addrlen);
@@ -470,4 +469,13 @@ block_send(SOCKET_TYPE fd, void *buffer, int sz) {
         assert(n == sz);
         return;
     }
+}
+
+inline int
+get_sockopt(SOCKET_TYPE fd, int level, int optname, int *optval, int *optlen) {
+#ifdef _WIN32
+    return getsockopt(fd, level, optname, (char*)optval, optlen);
+#else
+    return getsockopt(fd, level, optname, optval, optlen);
+#endif
 }

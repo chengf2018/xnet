@@ -6,6 +6,7 @@
 #define CMD_TYPE_CLOSE 2
 #define CMD_TYPE_CONNECT 3
 #define CMD_TYPE_SNED_TCP_PKG 4
+#define CMD_TYPE_USER_COMMAND 128
 
 static void
 update_time_cache(xnet_context_t *ctx) {
@@ -27,6 +28,14 @@ deal_with_timeout_event(xnet_context_t *ctx) {
 }
 
 static void
+send_cmd(xnet_context_t *ctx, xnet_cmdreq_t *req, int type, int len) {
+    SOCKET_TYPE fd = ctx->poll.send_fd;
+    req->header[6] = (uint8_t)type;
+    req->header[7] = (uint8_t)len;
+    block_send(fd, &req->header[6], len+2);
+}
+
+static void
 cmd_listen(xnet_context_t *ctx, xnet_cmdreq_listen_t *req) {
     xnet_listen_tcp_socket(&ctx->poll, req->port, NULL);
 }
@@ -41,13 +50,30 @@ cmd_close(xnet_context_t *ctx, xnet_cmdreq_close_t *req) {
 }
 
 static void
-cmd_connect() {
+cmd_connect(xnet_context_t *ctx, xnet_cmdreq_connect_t *req) {
+    xnet_socket_t *s;
+    if (xnet_connect_tcp_socket(&ctx->poll, req->host, req->port, &s) != 0) {
+        return;
+    }
 
 }
 
 static void
-cmd_send_tcp_pkg() {
+cmd_send_tcp_pkg(xnet_context_t *ctx, xnet_cmdreq_sendtcp_t *req) {
+    xnet_socket_t *s = &ctx->poll.slots[req->id];
+    if (s->type == SOCKET_TYPE_INVALID) {
+        free(req->data);
+        return;
+    }
 
+    append_send_buff(&ctx->poll, s, req->data, req->size);
+}
+
+static void
+cmd_command(xnet_context_t *ctx, xnet_cmdreq_command_t *req) {
+    assert(ctx->command_func);
+
+    ctx->command_func(ctx, req->command, req->data, req->size);
 }
 
 static int
@@ -82,19 +108,18 @@ ctrl_cmd(xnet_context_t *ctx) {
             cmd_listen(ctx, (xnet_cmdreq_listen_t *)buffer);
         break;
         case CMD_TYPE_CLOSE:
+            cmd_close(ctx, (xnet_cmdreq_close_t *)buffer);
         case CMD_TYPE_CONNECT:
+            cmd_connect(ctx, (xnet_cmdreq_connect_t *)buffer);
+        break;
         case CMD_TYPE_SNED_TCP_PKG:
+            cmd_send_tcp_pkg(ctx, (xnet_cmdreq_sendtcp_t *)buffer);
+        break;
+        case CMD_TYPE_USER_COMMAND:
+            cmd_command(ctx, (xnet_cmdreq_command_t *)buffer);
         break;
     }
     return -1;
-}
-
-static void
-send_cmd(xnet_context_t *ctx, xnet_cmdreq_t *req, int type, int len) {
-    SOCKET_TYPE fd = ctx->poll.send_fd;
-    req->header[6] = (uint8_t)type;
-    req->header[7] = (uint8_t)len;
-    block_send(fd, &req->header[6], len+2);
 }
 
 int
@@ -130,6 +155,7 @@ xnet_create_context() {
     ctx->error_func = NULL;
     ctx->connect_func = NULL;
     ctx->timeout_func = NULL;
+    ctx->command_func = NULL;
     return ctx;
 FAILED:
     free(ctx);
@@ -142,32 +168,30 @@ xnet_release_context(xnet_context_t *ctx) {
     free(ctx);
 }
 
-int
-xnet_register_listener(xnet_context_t *ctx, int port, xnet_listen_func_t listen_func, \
+void
+xnet_register_listener(xnet_context_t *ctx, xnet_listen_func_t listen_func, \
     xnet_error_func_t error_func, xnet_recv_func_t recv_func) {
-    int ret;
-
-    if (port != 0) {
-        ret = xnet_listen_tcp_socket(&ctx->poll, port, NULL);
-        if (ret == -1) {
-            return -1;
-        }
-    }
-
     ctx->listen_func = listen_func;
     ctx->error_func = error_func;
     ctx->recv_func = recv_func;
-    return 0;
 }
 
 void
-xnet_register_connected(xnet_context_t *ctx, xnet_connect_func_t connect_func) {
+xnet_register_connecter(xnet_context_t *ctx, xnet_connect_func_t connect_func, \
+    xnet_error_func_t error_func, xnet_recv_func_t recv_func) {
     ctx->connect_func = connect_func;
+    ctx->error_func = error_func;
+    ctx->recv_func = recv_func;
 }
 
 void
 xnet_register_timeout(xnet_context_t *ctx, xnet_timeout_func_t timeout_func) {
     ctx->timeout_func = timeout_func;
+}
+
+void
+xnet_register_command(xnet_context_t *ctx, xnet_command_func_t command_func) {
+    ctx->command_func = command_func;
 }
 
 int
@@ -195,6 +219,23 @@ xnet_close_socket(xnet_context_t *ctx, xnet_socket_t *s) {
     xnet_poll_closefd(&ctx->poll, s);
 }
 
+static void
+deal_with_connected(xnet_context_t *ctx, xnet_socket_t *s) {
+    int error;
+    socklen_t len = sizeof(error);
+    int code = get_sockopt(s->fd, SOL_SOCKET, SO_ERROR, &error, &len);  
+    if (code < 0 || error) {
+        error = code < 0 ? errno : error;
+        ctx->connect_func(ctx, s, error);
+        xnet_close_socket(ctx, s);
+        return;
+    }
+
+    s->type = SOCKET_TYPE_CONNECTED;
+    xnet_enable_write(&ctx->poll, s, false);
+    ctx->connect_func(ctx, s, 0);
+}
+
 int
 xnet_dispatch_loop(xnet_context_t *ctx) {
     int ret, i;
@@ -206,7 +247,7 @@ xnet_dispatch_loop(xnet_context_t *ctx) {
     int timeout = -1;
 
     while (1) {
-        if (has_cmd(ctx)) {
+        while (has_cmd(ctx)) {
             ret = ctrl_cmd(ctx);
             if (ret == 0) {
                 printf("exit loop\n");
@@ -235,6 +276,8 @@ xnet_dispatch_loop(xnet_context_t *ctx) {
         //对触发的事件进行处理
         for (i=0; i<poll_event->n; i++) {
             s = poll_event->s[i];
+            if (!s) continue;
+
             if (s->type == SOCKET_TYPE_LISTENING) {
                 ns = NULL;
                 if (xnet_accept_tcp_socket(poll, s, &ns) == 0) {
@@ -243,9 +286,7 @@ xnet_dispatch_loop(xnet_context_t *ctx) {
                     printf("accept tcp socket have error:%d\n", s->id);
                 }
             } else if(s->type == SOCKET_TYPE_CONNECTING) {
-                s->type = SOCKET_TYPE_CONNECTED;
-                xnet_enable_write(poll, s, false);
-                ctx->connect_func(ctx, s);
+                deal_with_connected(ctx, s);
             } else {
                 if (poll_event->read[i]) {
                     //输入缓存区有可读数据；处于监听状态，有连接到达；出错
@@ -289,10 +330,29 @@ xnet_dispatch_loop(xnet_context_t *ctx) {
     return 0;
 }
 
-//只能在主线程使用，后续需要支持多线程
+//只能在主线程使用
 void
 xnet_send_buffer(xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int sz) {
+    if (s->type == SOCKET_TYPE_INVALID)
+        return;
     char *new_buffer = (char*)malloc(sz);
     memcpy(new_buffer, buffer, sz);
     append_send_buff(&ctx->poll, s, new_buffer, sz);
+}
+
+int
+xnet_send_command(xnet_context_t *ctx, xnet_context_t *to_ctx, int command, void *data, int sz) {
+    xnet_cmdreq_t req;
+
+    if (!to_ctx->command_func) {
+        if (data) free(data);
+        return -1;
+    }
+
+    req.pkg.command_req.ctx = ctx;
+    req.pkg.command_req.command = command;
+    req.pkg.command_req.data = data;
+    req.pkg.command_req.size = sz;
+    send_cmd(to_ctx, &req, CMD_TYPE_USER_COMMAND, sizeof(xnet_cmdreq_command_t));
+    return 0;
 }
