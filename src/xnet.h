@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
 
 #include "xnet_struct.h"
 #include "xnet_util.h"
@@ -40,11 +41,11 @@ void xnet_exit(xnet_context_t *ctx);
 
 
 //管道接口，支持多线程
-int xnet_send_commond(xnet_context_t *ctx, xnet_context_t *to_ctx, int commond, void *data, int sz);
-int xnet_asyn_listen(xnet_context_t *ctx, int port, int back_command);
-int xnet_asyn_connect(xnet_context_t *ctx, char *host, int port, int back_command);
-int xnet_asyn_send_buffer();
-int xnet_asyn_close_socket();
-int xnet_asyn_exit();
+int xnet_send_command(xnet_context_t *ctx, xnet_context_t *source, int commond, void *data, int sz);
+int xnet_asyn_listen(xnet_context_t *ctx, xnet_context_t *source, int port, int back_command);
+int xnet_asyn_connect(xnet_context_t *ctx, xnet_context_t *source, char *host, int port, int back_command);
+int xnet_asyn_send_tcp_buffer(xnet_context_t *ctx, int id, char *buffer, int sz);
+int xnet_asyn_close_socket(xnet_context_t *ctx, int id);
+int xnet_asyn_exit(xnet_context_t *ctx, xnet_context_t *source);
 
 #endif //_XNET_H_

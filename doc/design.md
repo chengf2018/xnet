@@ -2,10 +2,11 @@ socket listen
     socket | direct
     bind   | direct
     listen | select/epoll
-
-大体参考libevent的设计
+windows下使用select，linux下使用epoll
+大体参考libevent和skynet的设计
 尽量将socket大部分跨平台代码在xnet_socket中实现
 
+finished:
 * 实现数据收发、监听
 * 先只实现单线程模式
 * 编写makefile，调试
@@ -16,10 +17,12 @@ socket listen
 * 实现linux平台支持
 * 定时机制
 
+todo list:
 多线程支持 管道命令完善
 优化排版
 半关闭机制（主动关闭前先推送完队列中的数据）
 
+log:
 4.18
 实现发数据功能（wb_list/xnet_send_data）
 makefile初步编写，编译通过
@@ -41,3 +44,5 @@ telnet测试通过，完善了一些socket接口
 4.30
 1.完成win下connect的测试
 2.完善管道命令
+5.6
+1.管道命令完善

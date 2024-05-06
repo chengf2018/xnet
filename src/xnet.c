@@ -55,7 +55,6 @@ cmd_connect(xnet_context_t *ctx, xnet_cmdreq_connect_t *req) {
     if (xnet_connect_tcp_socket(&ctx->poll, req->host, req->port, &s) != 0) {
         return;
     }
-
 }
 
 static void
@@ -73,7 +72,9 @@ static void
 cmd_command(xnet_context_t *ctx, xnet_cmdreq_command_t *req) {
     assert(ctx->command_func);
 
-    ctx->command_func(ctx, req->command, req->data, req->size);
+    if (ctx->command_func(ctx, req->source, req->command, req->data, req->size) == 0) {
+        if (req->data) free(req->data);
+    }
 }
 
 static int
@@ -97,9 +98,11 @@ ctrl_cmd(xnet_context_t *ctx) {
     uint8_t header[2];
     int type, len;
 
-    block_recv(fd, buffer, sizeof(header));
+    block_recv(fd, header, sizeof(header));
     type = header[0]; len = header[1];
-    block_recv(fd, buffer, len);
+printf("ctrl_cmd[%d, %d, %d]\n", type, len, sizeof(header));
+    if (len > 0)
+        block_recv(fd, buffer, len);
 
     switch (type) {
         case CMD_TYPE_EXIT:
@@ -293,8 +296,9 @@ xnet_dispatch_loop(xnet_context_t *ctx) {
                     printf("read event[%d]\n", s->id);
                     ret = xnet_recv_data(poll, s, &buffer);
                     if (ret > 0) {
-                        ctx->recv_func(ctx, s, buffer, ret);
-                        free(buffer); buffer = NULL;
+                        if (ctx->recv_func(ctx, s, buffer, ret) == 0)
+                            free(buffer);
+                        buffer = NULL;
                     } else if (ret < 0) {
                         ctx->error_func(ctx, s, 0);
                         xnet_poll_closefd(poll, s);
@@ -306,7 +310,6 @@ xnet_dispatch_loop(xnet_context_t *ctx) {
                     //发送缓冲列表内的数据
                     printf("write event[%d]\n", s->id);
                     xnet_send_data(&ctx->poll, s);
-                    //ctx->send_func(ctx, s);发送成功通知？暂时不需要
                 }
 
                 if (poll_event->error[i]) {
@@ -341,18 +344,66 @@ xnet_send_buffer(xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int sz) {
 }
 
 int
-xnet_send_command(xnet_context_t *ctx, xnet_context_t *to_ctx, int command, void *data, int sz) {
+xnet_send_command(xnet_context_t *ctx, xnet_context_t *source, int command, void *data, int sz) {
     xnet_cmdreq_t req;
 
-    if (!to_ctx->command_func) {
+    if (!ctx->command_func) {
         if (data) free(data);
         return -1;
     }
 
-    req.pkg.command_req.ctx = ctx;
+    req.pkg.command_req.source = source;
     req.pkg.command_req.command = command;
     req.pkg.command_req.data = data;
     req.pkg.command_req.size = sz;
-    send_cmd(to_ctx, &req, CMD_TYPE_USER_COMMAND, sizeof(xnet_cmdreq_command_t));
+    send_cmd(ctx, &req, CMD_TYPE_USER_COMMAND, sizeof(xnet_cmdreq_command_t));
     return 0;
+}
+
+
+int
+xnet_asyn_listen(xnet_context_t *ctx, xnet_context_t *source, int port, int back_command) {
+    xnet_cmdreq_t req;
+    req.pkg.listen_req.source = source;
+    req.pkg.listen_req.back_command = back_command;
+    req.pkg.listen_req.port = port;
+    send_cmd(ctx, &req, CMD_TYPE_LISTEN, sizeof(xnet_cmdreq_listen_t));
+    return 0;
+}
+
+int
+xnet_asyn_connect(xnet_context_t *ctx, xnet_context_t *source, char *host, int port, int back_command) {
+    xnet_cmdreq_t req;
+    size_t len = strlen(host);
+
+    if (len + sizeof(xnet_cmdreq_connect_t) > 255) return -1;
+    req.pkg.connect_req.source = source;
+    req.pkg.connect_req.back_command = back_command;
+    req.pkg.connect_req.port = port;
+    strcpy(req.pkg.connect_req.host, host);
+    send_cmd(ctx, &req, CMD_TYPE_CONNECT, sizeof(xnet_cmdreq_connect_t));
+    return 0;
+}
+
+int
+xnet_asyn_send_tcp_buffer(xnet_context_t *ctx, int id, char *buffer, int sz) {
+    xnet_cmdreq_t req;
+    req.pkg.send_tcp_req.id = id;
+    req.pkg.send_tcp_req.data = buffer;//it will free by receiver
+    req.pkg.send_tcp_req.size = sz;
+    send_cmd(ctx, &req, CMD_TYPE_SNED_TCP_PKG, sizeof(xnet_cmdreq_sendtcp_t));
+}
+
+int
+xnet_asyn_close_socket(xnet_context_t *ctx, int id) {
+    xnet_cmdreq_t req;
+    req.pkg.close_req.id = id;
+    send_cmd(ctx, &req, CMD_TYPE_CLOSE, sizeof(xnet_cmdreq_close_t));
+}
+
+int
+xnet_asyn_exit(xnet_context_t *ctx, xnet_context_t *source) {
+    xnet_cmdreq_t req;
+    req.pkg.exit_req.source = source;
+    send_cmd(ctx, &req, CMD_TYPE_EXIT, sizeof(xnet_cmdreq_exit_t));
 }

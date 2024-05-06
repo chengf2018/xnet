@@ -18,7 +18,7 @@ error_func(struct xnet_context_t *ctx, xnet_socket_t *s, short what) {
     xnet_add_timer(ctx, 2, 5000);
 }
 
-static void
+static int
 recv_func(struct xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int size) {
 	printf("-----socket [%d] recv buffer[%s], size[%d]\n", s->id, buffer, size);
 }

@@ -382,11 +382,11 @@ xnet_recv_data(xnet_poll_t *poll, xnet_socket_t *s, char **out_data) {
         return -2;
     }
 
-    if (out_data) {
+    if (out_data)
         *out_data = buffer;
-    } else {
+    else
         free(buffer);
-    }
+
     return n;
 }
 

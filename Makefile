@@ -13,7 +13,7 @@ test : test/test.c src/xnet_mq.c src/xnet_timeheap.c
 win : xnet_main.exe
 linux : xnet_main
 xnet_main.exe : $(SRC_C)
-	gcc -o $@ $^ -std=gnu99 -lws2_32
+	gcc -o $@ $^ -std=gnu99 -lws2_32 -pthread
 
 xnet_main : $(SRC_C)
-	gcc -o $@ $^ -std=gnu99
+	gcc -o $@ $^ -std=gnu99 -pthread
