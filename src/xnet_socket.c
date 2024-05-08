@@ -43,6 +43,7 @@ new_fd(xnet_poll_t *poll, SOCKET_TYPE fd, int id, uint8_t protocol, bool reading
     s->protocol = protocol;
     s->reading = false;
     s->writing = false;
+    s->closing = false;
     s->read_size = MIN_READ_SIZE;
 printf("new_fd 11111\n");
     assert(s->wb_list.head == NULL && s->wb_list.tail == NULL);
@@ -198,6 +199,11 @@ xnet_enable_read(xnet_poll_t *poll, xnet_socket_t *s, bool enable) {
 int
 xnet_enable_write(xnet_poll_t *poll, xnet_socket_t *s, bool enable) {
     return poll_enable_write(poll, s, enable);
+}
+
+inline bool
+wb_list_empty(xnet_socket_t *s) {
+    return s->wb_list.head == NULL;
 }
 
 void
@@ -382,6 +388,12 @@ xnet_recv_data(xnet_poll_t *poll, xnet_socket_t *s, char **out_data) {
         return -2;
     }
 
+    if (n == sz) {
+        s->read_size *= 2;
+    } else if(sz > MIN_READ_SIZE && n*2 < sz) {
+        s->read_size /= 2;
+    }
+
     if (out_data)
         *out_data = buffer;
     else
@@ -420,8 +432,13 @@ xnet_send_data(xnet_poll_t *poll, xnet_socket_t *s) {
         free_wb(wb);
     }
 
-    //发送完了,禁用写事件
-    xnet_enable_write(poll, s, false);
+    if (s->closing) {
+        xnet_poll_closefd(poll, s);
+    } else {
+        //发送完了,禁用写事件
+        xnet_enable_write(poll, s, false);
+    }
+
     return -1;
 }
 

@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "xnet_mq.h"
+
 #include "xnet_socket.h"
 #include "xnet_timeheap.h"
 
@@ -19,7 +19,7 @@ typedef void (*xnet_timeout_func_t)(struct xnet_context_t *ctx, int id);
 typedef int (*xnet_command_func_t)(struct xnet_context_t *ctx, struct xnet_context_t *source, int command, void *data, int sz);
 
 typedef struct xnet_context_t {
-	//xnet_mq_t mq;
+	int id;
 	xnet_poll_t poll;
 	xnet_timeheap_t th;
 	uint64_t nowtime;

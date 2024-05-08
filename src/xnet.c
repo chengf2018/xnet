@@ -1,5 +1,6 @@
 #include "xnet.h"
 #include <assert.h>
+#include <pthread.h>
 
 #define CMD_TYPE_EXIT 0
 #define CMD_TYPE_LISTEN 1
@@ -7,6 +8,40 @@
 #define CMD_TYPE_CONNECT 3
 #define CMD_TYPE_SNED_TCP_PKG 4
 #define CMD_TYPE_USER_COMMAND 128
+
+static xnet_context_t *g_log_ctx = NULL;
+
+static int
+log_command_func(xnet_context_t *ctx, xnet_context_t *source, int command, void *data, int sz) {
+    char time_str[128];
+    timestring(ctx->nowtime/1000, time_str, sizeof(time_str));
+
+    printf("[%d][%s.%03d]:", source->id, time_str, ctx->nowtime%1000);
+    printf((char*)data);
+    printf("\n");
+    return 0;
+}
+
+static void *
+thread_log(void *p) {
+    xnet_context_t *ctx = p;
+    xnet_register_command(ctx, log_command_func);
+    xnet_dispatch_loop(ctx);
+}
+
+static void
+log_init() {
+    pthread_t pid;
+    g_log_ctx = xnet_create_context();
+    if (!g_log_ctx) return;
+    pthread_create(&pid, NULL, thread_log, g_log_ctx);
+    pthread_detach(pid);
+}
+
+static void
+log_deinit() {
+    if (g_log_ctx) xnet_release_context(g_log_ctx);
+}
 
 static void
 update_time_cache(xnet_context_t *ctx) {
@@ -37,30 +72,47 @@ send_cmd(xnet_context_t *ctx, xnet_cmdreq_t *req, int type, int len) {
 
 static void
 cmd_listen(xnet_context_t *ctx, xnet_cmdreq_listen_t *req) {
-    xnet_listen_tcp_socket(&ctx->poll, req->port, NULL);
+    xnet_socket_t *s = NULL;
+    int ret;
+    if (xnet_listen_tcp_socket(&ctx->poll, req->port, &s) != 0) {
+        ret = -1;
+    } else {
+        ret = s->id;
+    }
+
+    if (req->source && req->back_command) {
+        xnet_send_command(req->source, ctx, req->back_command, NULL, ret);
+    }
 }
 
 static void
 cmd_close(xnet_context_t *ctx, xnet_cmdreq_close_t *req) {
     xnet_socket_t *s = &ctx->poll.slots[req->id];
-    if (s->type == SOCKET_TYPE_INVALID)
+    if (s->type == SOCKET_TYPE_INVALID || s->closing)
         return;
 
-    xnet_poll_closefd(&ctx->poll, s);
+    xnet_close_socket(ctx, s);
 }
 
 static void
 cmd_connect(xnet_context_t *ctx, xnet_cmdreq_connect_t *req) {
-    xnet_socket_t *s;
+    xnet_socket_t *s = NULL;
+    int ret;
     if (xnet_connect_tcp_socket(&ctx->poll, req->host, req->port, &s) != 0) {
-        return;
+        ret = -1;
+    } else {
+        ret = s->id;
+    }
+    if (req->source && req->back_command) {
+        //注意这里只是返回id，不一定就是已经连接成功
+        xnet_send_command(req->source, ctx, req->back_command, NULL, ret);
     }
 }
 
 static void
 cmd_send_tcp_pkg(xnet_context_t *ctx, xnet_cmdreq_sendtcp_t *req) {
     xnet_socket_t *s = &ctx->poll.slots[req->id];
-    if (s->type == SOCKET_TYPE_INVALID) {
+    if (s->type == SOCKET_TYPE_INVALID || s->closing) {
         free(req->data);
         return;
     }
@@ -73,7 +125,7 @@ cmd_command(xnet_context_t *ctx, xnet_cmdreq_command_t *req) {
     assert(ctx->command_func);
 
     if (ctx->command_func(ctx, req->source, req->command, req->data, req->size) == 0) {
-        if (req->data) free(req->data);
+        free(req->data);
     }
 }
 
@@ -101,8 +153,7 @@ ctrl_cmd(xnet_context_t *ctx) {
     block_recv(fd, header, sizeof(header));
     type = header[0]; len = header[1];
 printf("ctrl_cmd[%d, %d, %d]\n", type, len, sizeof(header));
-    if (len > 0)
-        block_recv(fd, buffer, len);
+    if (len > 0) block_recv(fd, buffer, len);
 
     switch (type) {
         case CMD_TYPE_EXIT:
@@ -128,6 +179,7 @@ printf("ctrl_cmd[%d, %d, %d]\n", type, len, sizeof(header));
 int
 xnet_init() {
     xnet_socket_init();
+    log_init();
     return 0;
 }
 
@@ -135,12 +187,14 @@ xnet_init() {
 int
 xnet_deinit() {
     xnet_socket_deinit();
+    log_deinit();
     return 0;
 }
 
 
 xnet_context_t *
 xnet_create_context() {
+    static int alloc_id = 0;
     xnet_context_t *ctx;
 
     ctx = (xnet_context_t *)malloc(sizeof(xnet_context_t));
@@ -153,6 +207,8 @@ xnet_create_context() {
     xnet_timeheap_init(&ctx->th);
     update_time_cache(ctx);
 
+    alloc_id += 1;
+    ctx->id = alloc_id;
     ctx->listen_func = NULL;
     ctx->recv_func = NULL;
     ctx->error_func = NULL;
@@ -169,6 +225,41 @@ void
 xnet_release_context(xnet_context_t *ctx) {
     xnet_timeheap_release(&ctx->th);
     free(ctx);
+}
+
+#define LOG_MESSAGE_SIZE 256
+void
+xnet_error(xnet_context_t *ctx, char *msg, ...) {
+    char tmp[LOG_MESSAGE_SIZE];
+    va_list ap;
+    int len, max_size;
+    char *data;
+
+    if (!g_log_ctx) return;
+
+    va_start(ap, msg);
+    len = vsnprintf(tmp, sizeof(tmp), msg, ap);
+    va_end(ap);
+    if (len < 0) return;
+    if (len < LOG_MESSAGE_SIZE) {
+        data = strdup(tmp); 
+    } else {
+        max_size = LOG_MESSAGE_SIZE;
+        for (;;) {
+            max_size *= 2;
+            data = malloc(max_size);
+            va_start(ap, msg);
+            len = vsnprintf(data, max_size, msg, ap);
+            va_end(ap);
+            if (len < max_size) break;
+            free(data);
+        }
+    }
+    if (len < 0) {
+        free(data);
+        return;
+    }
+    xnet_send_command(g_log_ctx, ctx, ctx->id, data, len);
 }
 
 void
@@ -219,7 +310,11 @@ xnet_connect(xnet_context_t *ctx, char *host, int port, xnet_socket_t **socket_o
 void
 xnet_close_socket(xnet_context_t *ctx, xnet_socket_t *s) {
     //主动关闭连接
-    xnet_poll_closefd(&ctx->poll, s);
+    if (wb_list_empty(s)) {
+        xnet_poll_closefd(&ctx->poll, s);
+        return;
+    }
+    s->closing = true;
 }
 
 static void
@@ -230,7 +325,7 @@ deal_with_connected(xnet_context_t *ctx, xnet_socket_t *s) {
     if (code < 0 || error) {
         error = code < 0 ? errno : error;
         ctx->connect_func(ctx, s, error);
-        xnet_close_socket(ctx, s);
+        xnet_poll_closefd(&ctx->poll, s);
         return;
     }
 
@@ -286,14 +381,14 @@ xnet_dispatch_loop(xnet_context_t *ctx) {
                 if (xnet_accept_tcp_socket(poll, s, &ns) == 0) {
                     ctx->listen_func(ctx, s, ns);
                 } else {
-                    printf("accept tcp socket have error:%d\n", s->id);
+                    xnet_error(ctx, "accept tcp socket have error:%d", s->id);
                 }
             } else if(s->type == SOCKET_TYPE_CONNECTING) {
                 deal_with_connected(ctx, s);
             } else {
                 if (poll_event->read[i]) {
                     //输入缓存区有可读数据；处于监听状态，有连接到达；出错
-                    printf("read event[%d]\n", s->id);
+                    xnet_error(ctx, "read event[%d]", s->id);
                     ret = xnet_recv_data(poll, s, &buffer);
                     if (ret > 0) {
                         if (ctx->recv_func(ctx, s, buffer, ret) == 0)
@@ -308,20 +403,20 @@ xnet_dispatch_loop(xnet_context_t *ctx) {
                 if (poll_event->write[i]) {
                     //输出缓冲区可写；连接成功
                     //发送缓冲列表内的数据
-                    printf("write event[%d]\n", s->id);
+                    xnet_error(ctx, "write event[%d]", s->id);
                     xnet_send_data(&ctx->poll, s);
                 }
 
                 if (poll_event->error[i]) {
                     //异常；带外数据
-                    printf("poll event error:%d\n", s->id);
+                    xnet_error(ctx, "poll event error:%d", s->id);
                     ctx->error_func(ctx, s, 1);
                     xnet_poll_closefd(&ctx->poll, s);
                 }
 #ifndef _WIN32
                 if (poll_event->eof[i]) {
                     //epoll特有的标记
-                    printf("poll event eof:%d\n", s->id);
+                    xnet_error(ctx, "poll event eof:%d", s->id);
                     ctx->error_func(ctx, s, 2);
                     xnet_poll_closefd(&ctx->poll, s);
                 }
@@ -336,7 +431,7 @@ xnet_dispatch_loop(xnet_context_t *ctx) {
 //只能在主线程使用
 void
 xnet_send_buffer(xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int sz) {
-    if (s->type == SOCKET_TYPE_INVALID)
+    if (s->type == SOCKET_TYPE_INVALID || s->closing)
         return;
     char *new_buffer = (char*)malloc(sz);
     memcpy(new_buffer, buffer, sz);

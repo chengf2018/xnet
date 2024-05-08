@@ -4,7 +4,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <pthread.h>
 
 #include "xnet_struct.h"
 #include "xnet_util.h"
@@ -13,6 +12,8 @@ int xnet_init();
 int xnet_deinit();
 xnet_context_t *xnet_create_context();
 void xnet_release_context(xnet_context_t *ctx);
+
+void xnet_error(xnet_context_t *ctx, char *str, ...);
 
 /*register类接口只能在主线程使用，在其他线程使用需要使用异步接口*/
 
@@ -27,8 +28,6 @@ void xnet_register_connecter(xnet_context_t *ctx, xnet_connect_func_t connect_fu
 void xnet_register_timeout(xnet_context_t *ctx, xnet_timeout_func_t timeout_func);
 void xnet_register_command(xnet_context_t *ctx, xnet_command_func_t command_func);
 
-//int xnet_register_packer(xnet_context_t *ctx);
-//int xnet_register_unpacker(xnet_context_t *ctx);
 
 int xnet_dispatch_loop(xnet_context_t *ctx);
 //以下接口只能在主线程使用

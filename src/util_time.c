@@ -1,4 +1,5 @@
 #include "xnet_util.h"
+#include <time.h>
 
 #ifdef _WIN32
 
@@ -45,4 +46,15 @@ get_time() {
 // 	t += ti.tv_nsec / 1000000;
 // 	return t;
 // #endif
+}
+
+#ifdef _WIN32
+	#define localtime_r(a,b) localtime_s((b), (a))
+#endif
+void
+timestring(uint64_t time, char *out, int size) {
+	struct tm info;
+	time_t ti = time;
+	localtime_r(&ti, &info);
+	strftime(out, size, "%d/%m/%y %H:%M:%S", &info);
 }

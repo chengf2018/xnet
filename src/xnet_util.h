@@ -13,6 +13,6 @@
 #endif
 
 uint64_t get_time();
-
+void timestring(uint64_t time, char *out, int size);
 
 #endif //_XNET_UTIL_H_

@@ -59,7 +59,7 @@ typedef struct {
     uint8_t protocol;//1tcp 2udp
     bool reading;
     bool writing;
-
+    bool closing;
     //发送缓冲区
     xnet_wb_list_t wb_list;
     int64_t wb_size;
@@ -127,6 +127,7 @@ int xnet_accept_tcp_socket(xnet_poll_t *poll, xnet_socket_t *listen_s, xnet_sock
 int xnet_connect_tcp_socket(xnet_poll_t *poll, char *host, int port, xnet_socket_t **socket_out);
 
 //以下接口不希望对外提供
+bool wb_list_empty(xnet_socket_t *s);
 void set_nonblocking(SOCKET_TYPE fd);
 void set_keepalive(SOCKET_TYPE fd);
 void append_send_buff(xnet_poll_t *poll, xnet_socket_t *s, char *buffer, int sz);

@@ -1,15 +1,15 @@
 #include "xnet.h"
-
+#include <pthread.h>
 static xnet_context_t *g_worker_ctx = NULL;
 
 static void
 listen_func(xnet_context_t *ctx, xnet_socket_t *s, xnet_socket_t *ns) {
-	printf("-----socket [%d] accept new, new socket:[%d]\n", s->id, ns->id);
+	xnet_error(ctx, "-----socket [%d] accept new, new socket:[%d]", s->id, ns->id);
 }
 
 static void
 error_func(xnet_context_t *ctx, xnet_socket_t *s, short what) {
-	printf("-----socket [%d] error, what:[%u]\n", s->id, what);
+	xnet_error(ctx, "-----socket [%d] error, what:[%u]", s->id, what);
 }
 
 static int
@@ -18,7 +18,7 @@ recv_func(xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int size) {
     memcpy(str, buffer, size);
     str[size] = '\0';
 
-	printf("-----socket [%d] recv buffer [%s], size[%d]\n", s->id, str, size);
+	xnet_error(ctx, "-----socket [%d] recv buffer [%s], size[%d]", s->id, str, size);
 	xnet_send_buffer(ctx, s, buffer, size);
     free(str);
     if (g_worker_ctx) {
@@ -33,7 +33,7 @@ static void
 timeout_func(xnet_context_t *ctx, int id) {
     static uint64_t last_time = 0;
 
-    printf("timeout event[%d], nowtime:%llu, nowtime2:%llu,nowtime3:%llu\n", id, ctx->nowtime, get_time(), last_time);
+    xnet_error(ctx, "timeout event[%d], nowtime:%llu, nowtime2:%llu,nowtime3:%llu", id, ctx->nowtime, get_time(), last_time);
     //xnet_add_timer(ctx, id, 2000);
 
     //last_time = get_time();
@@ -47,10 +47,10 @@ command_func(xnet_context_t *ctx, xnet_context_t *source, int command, void *dat
         char *str = malloc(sz+1);
         memcpy(str, (char*)data, sz);
         str[sz] = '\0';
-        printf("socket [%s], command\n", str);
+        xnet_error(ctx, "socket [%s], command", str);
         free(str);
     }
-    printf("deal command[%d], size:[%d]\n", command, sz);
+    xnet_error(ctx, "deal command[%d], size:[%d]", command, sz);
     return 0;//返回0，由xnet释放data
 }
 
@@ -58,10 +58,9 @@ static void *
 thread_worker(void *p) {
     xnet_context_t *ctx = p;
     xnet_register_command(ctx, command_func);
-printf("start test thread loop\n");
+xnet_error(ctx, "start worker thread loop");
     xnet_dispatch_loop(ctx);
-printf("test thread exit loop\n");
-    xnet_release_context(ctx);
+xnet_error(ctx, "worker thread exit loop");
 }
 
 int
@@ -76,27 +75,26 @@ main(int argc, char** argv) {
         return 1;
     }
 
-
-printf("start run\n");
     ctx = xnet_create_context();
-
+xnet_error(ctx, "------start run------");
 g_worker_ctx = xnet_create_context();
 pthread_create(&pid, NULL, thread_worker, g_worker_ctx);
 pthread_detach(pid);
 
-printf("register listener function\n");
     xnet_register_listener(ctx, listen_func, error_func, recv_func);
-
+xnet_error(ctx, "------start listen------");
     ret = xnet_listen(ctx, 8888, NULL);
     if (ret != 0) goto _END;
-printf("register timeout function\n");
+
     xnet_register_timeout(ctx, timeout_func);
     xnet_add_timer(ctx, 1, 2000);
-printf("start loop\n");
+xnet_error(ctx, "------start loop------");
 	xnet_dispatch_loop(ctx);
-printf("exit loop\n");
+xnet_error(ctx, "exit loop");
 _END:
     xnet_release_context(ctx);
+
+    if (g_worker_ctx) xnet_release_context(g_worker_ctx);
     xnet_deinit();
     return 0;
 }
