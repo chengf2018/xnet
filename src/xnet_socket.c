@@ -45,14 +45,11 @@ new_fd(xnet_poll_t *poll, SOCKET_TYPE fd, int id, uint8_t protocol, bool reading
     s->writing = false;
     s->closing = false;
     s->read_size = MIN_READ_SIZE;
-printf("new_fd 11111\n");
     assert(s->wb_list.head == NULL && s->wb_list.tail == NULL);
     s->wb_size = 0;
-printf("new_fd 22222\n");
+
     xnet_poll_addfd(poll, fd, id);
-printf("new_fd 33333\n");
     xnet_enable_read(poll, s, reading);
-printf("new_fd 44444\n");
     return s;
 }
 

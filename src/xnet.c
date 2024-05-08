@@ -9,16 +9,21 @@
 #define CMD_TYPE_SNED_TCP_PKG 4
 #define CMD_TYPE_USER_COMMAND 128
 
+typedef struct {
+    char *filename;
+    FILE *stdlog;
+} log_context_t;
+
 static xnet_context_t *g_log_ctx = NULL;
+static log_context_t log_context;
 
 static int
 log_command_func(xnet_context_t *ctx, xnet_context_t *source, int command, void *data, int sz) {
     char time_str[128];
     timestring(ctx->nowtime/1000, time_str, sizeof(time_str));
-
-    printf("[%d][%s.%03d]:", source->id, time_str, ctx->nowtime%1000);
-    printf((char*)data);
-    printf("\n");
+    fprintf(log_context.stdlog, "[%d][%s.%03d]:", command, time_str, ctx->nowtime%1000);
+    fwrite(data, sz, 1, log_context.stdlog);
+    fprintf(log_context.stdlog, "\n");
     return 0;
 }
 
@@ -30,8 +35,21 @@ thread_log(void *p) {
 }
 
 static void
-log_init() {
+log_init(char *log_filename) {
     pthread_t pid;
+
+    if (log_filename) {
+        log_context.filename = strdup(log_filename);
+        log_context.stdlog = fopen(log_filename, "a");
+        if (!log_context.stdlog) {
+            perror("open log file error");
+            return;
+        }
+    } else {
+        log_context.filename = NULL;
+        log_context.stdlog = stdout;
+    }
+
     g_log_ctx = xnet_create_context();
     if (!g_log_ctx) return;
     pthread_create(&pid, NULL, thread_log, g_log_ctx);
@@ -179,7 +197,7 @@ printf("ctrl_cmd[%d, %d, %d]\n", type, len, sizeof(header));
 int
 xnet_init() {
     xnet_socket_init();
-    log_init();
+    log_init(NULL);
     return 0;
 }
 
