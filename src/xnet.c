@@ -15,15 +15,15 @@ typedef struct {
 } log_context_t;
 
 static xnet_context_t *g_log_ctx = NULL;
-static log_context_t log_context;
+static log_context_t g_log_context;
 
 static int
 log_command_func(xnet_context_t *ctx, xnet_context_t *source, int command, void *data, int sz) {
     char time_str[128];
     timestring(ctx->nowtime/1000, time_str, sizeof(time_str));
-    fprintf(log_context.stdlog, "[%d][%s.%03d]:", command, time_str, ctx->nowtime%1000);
-    fwrite(data, sz, 1, log_context.stdlog);
-    fprintf(log_context.stdlog, "\n");
+    fprintf(g_log_context.stdlog, "[%d][%s.%03d]:", command, time_str, ctx->nowtime%1000);
+    fwrite(data, sz, 1, g_log_context.stdlog);
+    fprintf(g_log_context.stdlog, "\n");
     return 0;
 }
 
@@ -39,15 +39,15 @@ log_init(char *log_filename) {
     pthread_t pid;
 
     if (log_filename) {
-        log_context.filename = strdup(log_filename);
-        log_context.stdlog = fopen(log_filename, "a");
-        if (!log_context.stdlog) {
+        g_log_context.stdlog = fopen(log_filename, "a");
+        if (!g_log_context.stdlog) {
             perror("open log file error");
-            return;
+            g_log_context.stdlog = stdout;
         }
+        g_log_context.filename = strdup(log_filename);
     } else {
-        log_context.filename = NULL;
-        log_context.stdlog = stdout;
+        g_log_context.filename = NULL;
+        g_log_context.stdlog = stdout;
     }
 
     g_log_ctx = xnet_create_context();
@@ -59,6 +59,12 @@ log_init(char *log_filename) {
 static void
 log_deinit() {
     if (g_log_ctx) xnet_release_context(g_log_ctx);
+    if (g_log_context.filename) {
+        free(g_log_context.filename);
+    }
+    if (g_log_context.stdlog != stdout) {
+        fclose(g_log_context.stdlog);
+    }
 }
 
 static void
