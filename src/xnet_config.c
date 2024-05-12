@@ -7,7 +7,7 @@
 #define TO_UCHAR(c) (unsigned char)(c)
 #define TO_UINT(i) (unsigned int)(i)
 
-static int config_map_insert(config_map_t *cm, char *key, uint8_t value_type, map_elem_value_t value);
+static bool config_map_insert(config_map_t *cm, char *key, uint8_t value_type, map_elem_value_t value);
 
 static unsigned int
 string_hash(const char *key) {
@@ -50,19 +50,19 @@ config_map_deinit(config_map_t *cm) {
 	cm->slots = NULL;
 }
 
-static int
+static bool
 config_map_find(config_map_t *cm, const char *key, map_elem_t **out) {
 	map_elem_t *p;
 	unsigned int slot_index = string_hash(key) % cm->size;
 	p = &cm->slots[slot_index];
 	while (p && p->value_type != VALUE_TYPE_NIL) {
 		if (strcmp(key, p->key) == 0) {
-			*out = p;
-			return 1;
+			if (out) *out = p;
+			return true;
 		}
 		p = p->next;
 	}
-	return 0;
+	return false;
 }
 
 static void
@@ -90,7 +90,8 @@ static void
 config_map_reserve(config_map_t *cm) {
 	int newsize;
 	config_map_t new_cm;
-	if (cm->n + 1 > cm->size) {
+
+	if ((cm->n / cm->size) > 1.5) {
 		newsize = cm->size * 2;
 		new_cm.size = newsize;
 		new_cm.n = cm->n;
@@ -100,12 +101,14 @@ config_map_reserve(config_map_t *cm) {
 	}
 }
 
-static int
+static bool
 config_map_insert(config_map_t *cm, char *key, uint8_t value_type, map_elem_value_t value) {
 	unsigned int slot_index;
 	map_elem_t *elem, *last, *p;
-	config_map_reserve(cm);
 
+	if (config_map_find(cm, key, NULL)) return false;
+
+	config_map_reserve(cm);
 	slot_index = string_hash(key) % cm->size;
 	p = &cm->slots[slot_index];
 	if (p->value_type == VALUE_TYPE_NIL) {
@@ -122,6 +125,8 @@ config_map_insert(config_map_t *cm, char *key, uint8_t value_type, map_elem_valu
 	elem->value_type = value_type;
 	if (value_type == VALUE_TYPE_STRING) elem->value.s = strdup(value.s);
 	else elem->value = value;
+	cm->n++;
+	return true;
 }
 
 typedef struct {
