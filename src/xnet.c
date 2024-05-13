@@ -7,14 +7,16 @@
 #define CMD_TYPE_CLOSE 2
 #define CMD_TYPE_CONNECT 3
 #define CMD_TYPE_SNED_TCP_PKG 4
+#define CMD_TYPE_SEND_UPD_PKG 5
 #define CMD_TYPE_USER_COMMAND 128
 
 typedef struct {
     char *filename;
     FILE *stdlog;
+    xnet_context_t *log_ctx;
+    pthread_t pid;
 } log_context_t;
 
-static xnet_context_t *g_log_ctx = NULL;
 static log_context_t g_log_context;
 
 static int
@@ -31,41 +33,45 @@ log_command_func(xnet_context_t *ctx, xnet_context_t *source, int command, void 
 static void *
 thread_log(void *p) {
     xnet_context_t *ctx = p;
-    xnet_register_command(ctx, log_command_func);
     xnet_dispatch_loop(ctx);
 }
 
 static void
 log_init(const char *log_filename) {
     pthread_t pid;
+    xnet_context_t *log_ctx;
+    FILE *fp;
 
+    g_log_context.filename = NULL;
+    g_log_context.stdlog = stdout;
     if (log_filename) {
-        g_log_context.stdlog = fopen(log_filename, "a");
-        if (!g_log_context.stdlog) {
+        fp = fopen(log_filename, "a");
+        if (fp) {
+            g_log_context.filename = strdup(log_filename);
+            g_log_context.stdlog = fp;
+        } else {
             perror("open log file error");
-            g_log_context.stdlog = stdout;
         }
-        g_log_context.filename = strdup(log_filename);
-    } else {
-        g_log_context.filename = NULL;
-        g_log_context.stdlog = stdout;
     }
 
-    g_log_ctx = xnet_create_context();
-    if (!g_log_ctx) return;
-    pthread_create(&pid, NULL, thread_log, g_log_ctx);
+    log_ctx = xnet_create_context();
+    if (!log_ctx) return;
+
+    xnet_register_command(log_ctx, log_command_func);
+    pthread_create(&pid, NULL, thread_log, log_ctx);
     pthread_detach(pid);
+    g_log_context.log_ctx = log_ctx;
+    g_log_context.pid = pid;
 }
 
 static void
 log_deinit() {
-    if (g_log_ctx) xnet_release_context(g_log_ctx);
-    if (g_log_context.filename) {
+    if (g_log_context.log_ctx)
+        xnet_release_context(g_log_context.log_ctx);
+    if (g_log_context.filename)
         free(g_log_context.filename);
-    }
-    if (g_log_context.stdlog != stdout) {
+    if (g_log_context.stdlog != stdout)
         fclose(g_log_context.stdlog);
-    }
 }
 
 static void
@@ -177,7 +183,7 @@ ctrl_cmd(xnet_context_t *ctx) {
 
     block_recv(fd, header, sizeof(header));
     type = header[0]; len = header[1];
-printf("ctrl_cmd[%d, %d, %d]\n", type, len, sizeof(header));
+printf("ctrl_cmd[%d, %d, %d, %d]\n", type, len, sizeof(header), ctx->id);
     if (len > 0) block_recv(fd, buffer, len);
 
     switch (type) {
@@ -261,7 +267,7 @@ xnet_error(xnet_context_t *ctx, char *msg, ...) {
     int len, max_size;
     char *data;
 
-    if (!g_log_ctx) return;
+    if (!g_log_context.log_ctx) return;
 
     va_start(ap, msg);
     len = vsnprintf(tmp, sizeof(tmp), msg, ap);
@@ -285,7 +291,7 @@ xnet_error(xnet_context_t *ctx, char *msg, ...) {
         free(data);
         return;
     }
-    xnet_send_command(g_log_ctx, ctx, ctx->id, data, len);
+    xnet_send_command(g_log_context.log_ctx, ctx, ctx->id, data, len);
 }
 
 void
@@ -468,6 +474,7 @@ int
 xnet_send_command(xnet_context_t *ctx, xnet_context_t *source, int command, void *data, int sz) {
     xnet_cmdreq_t req;
 
+    //must register command function before send command
     if (!ctx->command_func) {
         if (data) free(data);
         return -1;

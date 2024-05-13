@@ -97,7 +97,11 @@ main(int argc, char** argv) {
     xnet_context_t *ctx;
     pthread_t pid;
     xnet_init_config_t init_config;
-    start_init_config(&init_config, "./test.config");
+    const char *config_name = "./test.config";
+    if (argc == 2) config_name = argv[1];
+printf("config name:[%s]\n", config_name);
+
+    start_init_config(&init_config, config_name);
 
     ret = xnet_init(&init_config);
     if (ret != 0) {
