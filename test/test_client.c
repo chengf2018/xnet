@@ -45,7 +45,7 @@ main(int argc, char** argv) {
     int ret;
     xnet_context_t *ctx;
 
-    ret = xnet_init();
+    ret = xnet_init(NULL);
     if (ret != 0) {
         printf("xnet init error:%d\n", ret);
         return 1;

@@ -24,6 +24,7 @@ log_command_func(xnet_context_t *ctx, xnet_context_t *source, int command, void 
     fprintf(g_log_context.stdlog, "[%d][%s.%03d]:", command, time_str, ctx->nowtime%1000);
     fwrite(data, sz, 1, g_log_context.stdlog);
     fprintf(g_log_context.stdlog, "\n");
+    fflush(g_log_context.stdlog);
     return 0;
 }
 
@@ -35,7 +36,7 @@ thread_log(void *p) {
 }
 
 static void
-log_init(char *log_filename) {
+log_init(const char *log_filename) {
     pthread_t pid;
 
     if (log_filename) {
@@ -201,9 +202,10 @@ printf("ctrl_cmd[%d, %d, %d]\n", type, len, sizeof(header));
 }
 
 int
-xnet_init() {
+xnet_init(xnet_init_config_t *init_config) {
+    const char *log_path = init_config ? init_config->log_path : NULL;
     xnet_socket_init();
-    log_init(NULL);
+    log_init(log_path);
     return 0;
 }
 

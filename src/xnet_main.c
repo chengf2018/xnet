@@ -1,4 +1,6 @@
 #include "xnet.h"
+#include "xnet_config.h"
+
 #include <pthread.h>
 static xnet_context_t *g_worker_ctx = NULL;
 
@@ -63,15 +65,44 @@ xnet_error(ctx, "start worker thread loop");
 xnet_error(ctx, "worker thread exit loop");
 }
 
+static void
+start_init_config(xnet_init_config_t *init_config, const char *config_name) {
+    xnet_config_t config;
+    char *log_path;
+    init_config->log_path = NULL;
+
+    if (!config_name) return;
+
+    xnet_config_init(&config);
+    if (xnet_parse_config(&config, config_name) != 0) {
+        xnet_release_config(&config);
+        return;
+    }
+
+    if (xnet_get_field2s(&config, "log_path", &log_path)) {
+        init_config->log_path = strdup(log_path);
+    }
+
+    xnet_release_config(&config);
+}
+
+static void
+release_init_config(xnet_init_config_t *init_config) {
+    if (init_config->log_path) free(init_config->log_path);
+}
+
 int
 main(int argc, char** argv) {
     int ret;
     xnet_context_t *ctx;
     pthread_t pid;
+    xnet_init_config_t init_config;
+    start_init_config(&init_config, "./test.config");
 
-    ret = xnet_init();
+    ret = xnet_init(&init_config);
     if (ret != 0) {
         printf("xnet init error:%d\n", ret);
+        release_init_config(&init_config);
         return 1;
     }
 
@@ -90,11 +121,12 @@ xnet_error(ctx, "------start listen------");
     xnet_add_timer(ctx, 1, 2000);
 xnet_error(ctx, "------start loop------");
 	xnet_dispatch_loop(ctx);
-xnet_error(ctx, "exit loop");
+xnet_error(ctx, "------exit loop------");
 _END:
     xnet_release_context(ctx);
 
     if (g_worker_ctx) xnet_release_context(g_worker_ctx);
     xnet_deinit();
+    release_init_config(&init_config);
     return 0;
 }

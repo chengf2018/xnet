@@ -79,4 +79,8 @@ typedef struct {
 	} pkg;
 } xnet_cmdreq_t;
 
+typedef struct {
+	char *log_path;
+} xnet_init_config_t;
+
 #endif //_XNET_STRUCT_H_

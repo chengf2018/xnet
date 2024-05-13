@@ -179,7 +179,7 @@ peekc(loadfile_t *lf) {
 static int
 skipblank(loadfile_t *lf) {
 	int c = peekc(lf);
-	while (c != -1 && (char)c==' ') {
+	while (c != -1 && ((char)c==' ')||(char)c=='\t') {
 		nextc(lf); c = peekc(lf);
 	};
 	return c;
@@ -188,7 +188,7 @@ skipblank(loadfile_t *lf) {
 static int
 skipblank_rn(loadfile_t *lf) {
 	int c = peekc(lf);
-	while (c != -1 && ((char)c==' '||(char)c=='\r'||(char)c=='\n')){
+	while (c != -1 && ((char)c==' '||(char)c=='\t'||(char)c=='\r'||(char)c=='\n')){
 		nextc(lf); c = peekc(lf);
 	}
 	return c;
@@ -230,18 +230,17 @@ parse_value(loadfile_t *lf, tempbuff_t *tb, int *type, map_elem_value_t *value) 
 	int c, i;
 	c = nextc(lf);
 	if (c == '\"') {
-		*type = VALUE_TYPE_STRING;
 		c = nextc(lf);
 		while (c != -1 && c != '\"') {
 			tempbuff_save(tb, c);
 			c = nextc(lf);
 		}
 		tempbuff_save(tb, '\0');
+		if (c != '\"') return -2;
+		*type = VALUE_TYPE_STRING;
 		value->s = tb->buffer;
 		c = nextc(lf);
-	} else if (IS_NUMBER_CHAR(c) || c == '-') {
-		*type = VALUE_TYPE_INT;
-printf("---value_type:[%d]\n", *type);
+	} else if (IS_NUMBER_CHAR(c) || c == '-') {	
 		tempbuff_save(tb, c);
 		c = nextc(lf);
 		while (c != -1 && IS_NUMBER_CHAR(c)) {
@@ -249,6 +248,7 @@ printf("---value_type:[%d]\n", *type);
 			c = nextc(lf);
 		}
 		tempbuff_save(tb, '\0');
+		*type = VALUE_TYPE_INT;
 		value->i = atoi(tb->buffer);
 	} else if (c == 't') {
 		for (i=1; i<4; i++) {
@@ -259,6 +259,7 @@ printf("---value_type:[%d]\n", *type);
 		if (i != 4) return -2;
 		*type = VALUE_TYPE_BOOL;
 		value->b = true;
+		c = nextc(lf);
 	} else if (c == 'f') {
 		for (i=1; i<5; i++) {
 			c = nextc(lf);
@@ -268,6 +269,7 @@ printf("---value_type:[%d]\n", *type);
 		if (i != 5) return -2;
 		*type = VALUE_TYPE_BOOL;
 		value->b = false;
+		c = nextc(lf);
 	} else {
 		return -2;
 	}
@@ -289,8 +291,8 @@ parse_field(xnet_config_t *config, loadfile_t *lf, tempbuff_t *tb) {
 	tempbuff_reset(tb);
 
 	c = parse_token(lf, tb);
+	if (c < 0) return -2;
 
-	if (c < 0) return c;
 	tempbuff_save(tb, '\0');
 	key = strdup(tb->buffer);
 printf("parse_field, key:%s\n", key);
@@ -301,9 +303,18 @@ printf("parse_field, key:%s\n", key);
 	value_type = VALUE_TYPE_NIL;
 	tempbuff_reset(tb);
 	c = parse_value(lf, tb, &value_type, &value);
-printf("paruse_value:[%c], %d\n", (char)c, value_type);
 	if (c == -2 || value_type == VALUE_TYPE_NIL) goto _PARSE_ERROR;
-	config_map_insert(&config->fields, key, value_type, value);
+//test print
+if (value_type == VALUE_TYPE_INT)
+	printf("paruse_value, value:[%d]\n", value.i);
+else if(value_type == VALUE_TYPE_STRING)
+	printf("paruse_value, value:[%s]\n", value.s);
+else if (value_type == VALUE_TYPE_BOOL)
+	printf("paruse_value, value:[%s]\n", value.b ? "true" : "false");
+
+	if (!config_map_insert(&config->fields, key, value_type, value)) {
+		printf("repated field:%s\n", key);
+	}
 	free(key);
 	return c;
 _PARSE_ERROR:
@@ -325,9 +336,8 @@ xnet_parse_config(xnet_config_t *config, const char *filename) {
 printf("parseconfig start\n");
 	for (;;) {
 		c = parse_field(config, &lf, &tb);
-		printf("parse_field ok, c:[%d]\n", c);
 		if (c < 0) break;
-		if (c == '\r' || c == '\n' || c == ' ') {
+		if (c == '\r' || c == '\n' || c == ' ' || c == '\n' || c == '#') {
 			c = skipblank_rn(&lf);
 			if (c < 0) break;
 		} else {
@@ -337,7 +347,7 @@ printf("parseconfig start\n");
 printf("parseconfig end\n");
 	tempbuff_free(&tb);
 	fclose(fp);
-	return c == -1 ? 0 : c;
+	return c == -1 ? 0 : -2;
 }
 
 void

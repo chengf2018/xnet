@@ -8,7 +8,8 @@
 #include "xnet_struct.h"
 #include "xnet_util.h"
 
-int xnet_init();
+
+int xnet_init(xnet_init_config_t *config);
 int xnet_deinit();
 xnet_context_t *xnet_create_context();
 void xnet_release_context(xnet_context_t *ctx);
