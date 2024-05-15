@@ -24,7 +24,7 @@
 * 配置解析模块，server支持配置传参
 
 ## todo list
-
+* ipv6支持
 * udp支持
 * socket数据包多发优化，共用一个数据包
 * 绑定lua

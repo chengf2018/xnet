@@ -154,6 +154,24 @@ xnet_poll_init(xnet_poll_t *poll) {
 }
 
 int
+xnet_poll_deinit(xnet_poll_t *poll) {
+#ifdef _WIN32
+    dlink_node_t *tmp;
+    while (poll->socket_list) {
+        tmp = poll->socket_list;
+        poll->socket_list = poll->socket_list->next;
+        free(tmp);
+    }
+#else
+    closesocket(poll->epoll_fd);
+#endif
+
+    closesocket(poll->send_fd);
+    closesocket(poll->recv_fd);
+    return 0;
+}
+
+int
 xnet_poll_addfd(xnet_poll_t *poll, SOCKET_TYPE fd, int id) {
 #ifdef _WIN32
     //select
@@ -224,37 +242,64 @@ xnet_poll_wait(xnet_poll_t *poll, int timeout) {
     return poll_wait(poll, timeout);
 }
 
-int
-xnet_listen_tcp_socket(xnet_poll_t *poll, int port, xnet_socket_t **socket_out) {
-    struct sockaddr_in serverAddr;
-    SOCKET_TYPE fd = 0;
-    xnet_socket_t *s;
-    int id;
+static SOCKET_TYPE
+do_bind(const char *host, int port, int protocol, int *family) {
+    SOCKET_TYPE fd = -1;
+    int status;
     int reuse = 1;
+    struct addrinfo ai_hints;
+    struct addrinfo *ai_list = NULL;
+    char str_port[16];
 
-    serverAddr.sin_family = AF_INET;
-    serverAddr.sin_addr.s_addr = INADDR_ANY;
-    serverAddr.sin_port = htons(port);
+    if (host == NULL || host[0] == 0) host = "0.0.0.0";
+    memset(&ai_hints, 0, sizeof(ai_hints));
+    sprintf(str_port, "%d", port);
 
-    fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (fd == -1) goto FAILED;
+    ai_hints.ai_family = AF_UNSPEC;
+    ai_hints.ai_protocol = protocol;
+    ai_hints.ai_socktype = (protocol==IPPROTO_TCP)?SOCK_STREAM:SOCK_DGRAM;
 
-    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (void *)&reuse, sizeof(int)) == -1) {
+    status = getaddrinfo(host, str_port, &ai_hints, &ai_list);
+    if ( status != 0 ) return -1;
+
+    fd = socket(ai_list->ai_family, ai_list->ai_socktype, 0);
+    if (fd < 0) goto FAILED_FD;
+
+    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (void *)&reuse, sizeof(int)) == -1)
         goto FAILED;
-    }
 
-    if (bind(fd, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == -1)
+    if (bind(fd, (struct sockaddr*)ai_list->ai_addr, ai_list->ai_addrlen) == -1)
         goto FAILED;
-    if (listen(fd, 5) == -1) goto FAILED;
+
+    *family = ai_list->ai_family;
+    freeaddrinfo(ai_list);
+    return fd;
+FAILED:
+    closesocket(fd);
+FAILED_FD:
+    freeaddrinfo(ai_list);
+    return -1;
+}
+
+int
+xnet_listen_tcp_socket(xnet_poll_t *poll, const char *host, int port, int backlog, xnet_socket_t **socket_out) {
+    xnet_socket_t *s;
+    int id, family;
+    SOCKET_TYPE fd = do_bind(host, port, IPPROTO_TCP, &family);
+    if (fd < 0) return -1;
+
+    if (listen(fd, backlog) == -1) goto FAILED;
+
     id = alloc_socket_id(poll);
     if (id == -1) goto FAILED;
+
     s = new_fd(poll, fd, id, SOCKET_PROTOCOL_TCP, true);
     s->type = SOCKET_TYPE_LISTENING;
 
     if (socket_out) *socket_out = s;
     return 0;
 FAILED:
-    if (fd) closesocket(fd);
+    closesocket(fd);
     return -1;
 }
 
@@ -289,7 +334,7 @@ FAILED:
 //返回0，连接中
 //返回-1，连接失败
 int
-xnet_connect_tcp_socket(xnet_poll_t *poll, char *host, int port, xnet_socket_t **socket_out) {
+xnet_connect_tcp_socket(xnet_poll_t *poll, const char *host, int port, xnet_socket_t **socket_out) {
     int status, err, id;
     struct addrinfo ai_hints;
     struct addrinfo *ai_list = NULL;
@@ -356,6 +401,51 @@ xnet_connect_tcp_socket(xnet_poll_t *poll, char *host, int port, xnet_socket_t *
 FAILED:
     freeaddrinfo(ai_list);
     return -1;
+}
+
+int
+xnet_listen_udp_socket(xnet_poll_t *poll, const char *host, int port, xnet_socket_t **socket_out) {
+    xnet_socket_t *s;
+    SOCKET_TYPE fd;
+    int id, family;
+    fd = do_bind(host, port, IPPROTO_UDP, &family);
+    if (fd < 0) return -1;
+
+    id = alloc_socket_id(poll);
+    if (id == -1) goto FAILED;
+    s = new_fd(poll, fd, id, SOCKET_PROTOCOL_UDP, true);
+    s->type = SOCKET_TYPE_CONNECTED;
+    set_nonblocking(fd);
+    if (socket_out) *socket_out = s;
+    return 0;
+FAILED:
+    if (fd) closesocket(fd);
+    return -1;
+}
+
+int
+xnet_create_udp_socket(xnet_poll_t *poll, xnet_socket_t **socket_out) {
+    xnet_socket_t *s;
+    SOCKET_TYPE fd;
+    int id;
+    fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (fd < 0) return -1;
+
+    id = alloc_socket_id(poll);
+    if (id == -1) goto FAILED;
+    s = new_fd(poll, fd, id, SOCKET_PROTOCOL_UDP, true);
+    s->type = SOCKET_TYPE_CONNECTED;
+    set_nonblocking(fd);
+
+    if (socket_out) *socket_out = s;
+    return 0;
+FAILED:
+    if (fd) closesocket(fd);
+    return -1;
+}
+int
+xnet_set_udp_socket_addr(xnet_poll_t *poll) {
+
 }
 
 //返回-2，socket已关闭

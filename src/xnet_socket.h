@@ -84,8 +84,6 @@ typedef struct dlink_node {
 } dlink_node_t;
 
 typedef struct {
-//win:fd set
-//unix:epoll inst
 #ifdef _WIN32
     fd_set readfds;
     fd_set writefds;
@@ -112,6 +110,7 @@ typedef struct {
 int xnet_socket_init();
 int xnet_socket_deinit();
 int xnet_poll_init(xnet_poll_t *poll);
+int xnet_poll_deinit(xnet_poll_t *poll);
 int xnet_poll_addfd(xnet_poll_t *poll, SOCKET_TYPE fd, int id);
 int xnet_poll_closefd(xnet_poll_t *poll, xnet_socket_t *s);
 int xnet_poll_wait(xnet_poll_t *poll, int timeout);//进行io等待，触发后返回触发的socket列表，保存在poll->event中
@@ -122,9 +121,13 @@ int xnet_enable_write(xnet_poll_t *poll, xnet_socket_t *s, bool enable);
 int xnet_recv_data(xnet_poll_t *poll, xnet_socket_t *s, char **out_data);
 int xnet_send_data(xnet_poll_t *poll, xnet_socket_t *s);
 
-int xnet_listen_tcp_socket(xnet_poll_t *poll, int port, xnet_socket_t **socket_out);
+int xnet_listen_tcp_socket(xnet_poll_t *poll, const char *host, int port, int backlog, xnet_socket_t **socket_out);
 int xnet_accept_tcp_socket(xnet_poll_t *poll, xnet_socket_t *listen_s, xnet_socket_t **socket_out);
-int xnet_connect_tcp_socket(xnet_poll_t *poll, char *host, int port, xnet_socket_t **socket_out);
+int xnet_connect_tcp_socket(xnet_poll_t *poll, const char *host, int port, xnet_socket_t **socket_out);
+
+int xnet_listen_udp_socket(xnet_poll_t *poll, const char *host, int port, xnet_socket_t **socket_out);
+int xnet_create_udp_socket(xnet_poll_t *poll, xnet_socket_t **socket_out);
+int xnet_set_udp_socket_addr(xnet_poll_t *poll);
 
 //以下接口不希望对外提供
 bool wb_list_empty(xnet_socket_t *s);

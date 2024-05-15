@@ -21,7 +21,7 @@ recv_func(xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int size) {
     str[size] = '\0';
 
 	xnet_error(ctx, "-----socket [%d] recv buffer [%s], size[%d]", s->id, str, size);
-	xnet_send_buffer(ctx, s, buffer, size);
+	xnet_send_tcp_buffer(ctx, s, buffer, size);
     free(str);
     if (g_worker_ctx) {
         xnet_send_command(g_worker_ctx, ctx, 1, buffer, size);
@@ -118,7 +118,7 @@ pthread_detach(pid);
 
     xnet_register_listener(ctx, listen_func, error_func, recv_func);
 xnet_error(ctx, "------start listen------");
-    ret = xnet_listen(ctx, 8888, NULL);
+    ret = xnet_tcp_listen(ctx, NULL, 8888, 5, NULL);
     if (ret != 0) goto _END;
 
     xnet_register_timeout(ctx, timeout_func);

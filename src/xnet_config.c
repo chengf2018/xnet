@@ -7,7 +7,7 @@
 #define TO_UCHAR(c) (unsigned char)(c)
 #define TO_UINT(i) (unsigned int)(i)
 
-static bool config_map_insert(config_map_t *cm, char *key, uint8_t value_type, map_elem_value_t value);
+static bool config_map_insert(config_map_t *cm, char *key, uint8_t value_type, map_elem_value_t value, bool raw);
 
 static unsigned int
 string_hash(const char *key) {
@@ -72,10 +72,8 @@ config_map_rehash(config_map_t *old_cm, config_map_t *new_cm) {
 	for (i=0; i<old_cm->size; i++) {
 		p = &old_cm->slots[i];
 		while (p && p->value_type != VALUE_TYPE_NIL) {
-			config_map_insert(new_cm, p->key, p->value_type, p->value);
+			assert(config_map_insert(new_cm, p->key, p->value_type, p->value, true)==true);
 			tmp = p; p = p->next;
-			if (tmp->key) free(tmp->key);
-			if (tmp->value_type == VALUE_TYPE_STRING) free(tmp->value.s);
 			if (tmp != &old_cm->slots[i])//first node don't need free
 				free(tmp);
 		}
@@ -91,10 +89,10 @@ config_map_reserve(config_map_t *cm) {
 	int newsize;
 	config_map_t new_cm;
 
-	if ((cm->n / cm->size) > 1.5) {
+	if ((cm->n / cm->size) > 2.0f) {
 		newsize = cm->size * 2;
 		new_cm.size = newsize;
-		new_cm.n = cm->n;
+		new_cm.n = 0;
 		new_cm.slots = malloc(newsize * sizeof(map_elem_t));
 		memset(new_cm.slots, 0, newsize * sizeof(map_elem_t));
 		config_map_rehash(cm, &new_cm);
@@ -102,7 +100,7 @@ config_map_reserve(config_map_t *cm) {
 }
 
 static bool
-config_map_insert(config_map_t *cm, char *key, uint8_t value_type, map_elem_value_t value) {
+config_map_insert(config_map_t *cm, char *key, uint8_t value_type, map_elem_value_t value, bool raw) {
 	unsigned int slot_index;
 	map_elem_t *elem, *last, *p;
 
@@ -116,14 +114,14 @@ config_map_insert(config_map_t *cm, char *key, uint8_t value_type, map_elem_valu
 		assert(p->next == NULL);
 	} else {
 		elem = malloc(sizeof(map_elem_t));
-		if (p->next)
-			elem->next = p->next;
+		if (p->next) elem->next = p->next;
+		else elem->next = NULL;
 		p->next = elem;
 	}
 
-	elem->key = strdup(key);
+	elem->key = raw ? key : strdup(key);
 	elem->value_type = value_type;
-	if (value_type == VALUE_TYPE_STRING) elem->value.s = strdup(value.s);
+	if (value_type == VALUE_TYPE_STRING) elem->value.s = raw ? value.s : strdup(value.s);
 	else elem->value = value;
 	cm->n++;
 	return true;
@@ -312,7 +310,7 @@ else if(value_type == VALUE_TYPE_STRING)
 else if (value_type == VALUE_TYPE_BOOL)
 	printf("paruse_value, value:[%s]\n", value.b ? "true" : "false");
 
-	if (!config_map_insert(&config->fields, key, value_type, value)) {
+	if (!config_map_insert(&config->fields, key, value_type, value, false)) {
 		printf("repated field:%s\n", key);
 	}
 	free(key);

@@ -32,11 +32,11 @@ timeout_func(struct xnet_context_t *ctx, int id) {
         xnet_add_timer(ctx, 1, 2000);
         if (g_s) {
             xnet_error(ctx, "send buffer");
-            xnet_send_buffer(ctx, g_s, buffer, sizeof(buffer));
+            xnet_send_tcp_buffer(ctx, g_s, buffer, sizeof(buffer));
         }
     } else if (id == 2) {
         xnet_error(ctx, "try connect server");
-        xnet_connect(ctx, "127.0.0.1", 8888, NULL);
+        xnet_tcp_connect(ctx, "127.0.0.1", 8888, NULL);
     }
 }
 
@@ -54,7 +54,7 @@ main(int argc, char** argv) {
     ctx = xnet_create_context();
     xnet_register_connecter(ctx, connected_func, error_func, recv_func);
 
-    xnet_connect(ctx, "127.0.0.1", 8888, NULL);
+    xnet_tcp_connect(ctx, "127.0.0.1", 8888, NULL);
     if (ret != 0) goto _END;
 
     xnet_register_timeout(ctx, timeout_func);

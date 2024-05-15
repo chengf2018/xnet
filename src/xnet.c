@@ -105,15 +105,14 @@ static void
 cmd_listen(xnet_context_t *ctx, xnet_cmdreq_listen_t *req) {
     xnet_socket_t *s = NULL;
     int ret;
-    if (xnet_listen_tcp_socket(&ctx->poll, req->port, &s) != 0) {
-        ret = -1;
-    } else {
-        ret = s->id;
-    }
 
-    if (req->source && req->back_command) {
+    if (xnet_listen_tcp_socket(&ctx->poll, req->host, req->port, req->backlog, &s) != 0)
+        ret = -1;
+    else
+        ret = s->id;
+
+    if (req->source && req->back_command)
         xnet_send_command(req->source, ctx, req->back_command, NULL, ret);
-    }
 }
 
 static void
@@ -188,6 +187,7 @@ printf("ctrl_cmd[%d, %d, %d, %d]\n", type, len, sizeof(header), ctx->id);
 
     switch (type) {
         case CMD_TYPE_EXIT:
+            ctx->to_quit = true;
             return 0;
         case CMD_TYPE_LISTEN:
             cmd_listen(ctx, (xnet_cmdreq_listen_t *)buffer);
@@ -232,7 +232,6 @@ xnet_create_context() {
     ctx = (xnet_context_t *)malloc(sizeof(xnet_context_t));
     if (!ctx) return NULL;
 
-    //xnet_mq_init(&ctx->mq);
     if (xnet_poll_init(&ctx->poll) != 0) {
         goto FAILED;
     }
@@ -241,6 +240,7 @@ xnet_create_context() {
 
     alloc_id += 1;
     ctx->id = alloc_id;
+    ctx->to_quit = false;
     ctx->listen_func = NULL;
     ctx->recv_func = NULL;
     ctx->error_func = NULL;
@@ -255,6 +255,7 @@ FAILED:
 
 void
 xnet_release_context(xnet_context_t *ctx) {
+    xnet_poll_deinit(&ctx->poll);
     xnet_timeheap_release(&ctx->th);
     free(ctx);
 }
@@ -330,12 +331,12 @@ xnet_add_timer(xnet_context_t *ctx, int id, int timeout) {
 }
 
 int
-xnet_listen(xnet_context_t *ctx, int port, xnet_socket_t **socket_out) {
-    return xnet_listen_tcp_socket(&ctx->poll, port, socket_out);
+xnet_tcp_listen(xnet_context_t *ctx, const char *host, int port, int backlog, xnet_socket_t **socket_out) {
+    return xnet_listen_tcp_socket(&ctx->poll, host, port, backlog, socket_out);
 }
 
 int
-xnet_connect(xnet_context_t *ctx, char *host, int port, xnet_socket_t **socket_out) {
+xnet_tcp_connect(xnet_context_t *ctx, const char *host, int port, xnet_socket_t **socket_out) {
     return xnet_connect_tcp_socket(&ctx->poll, host, port, socket_out);
 }
 
@@ -347,6 +348,24 @@ xnet_close_socket(xnet_context_t *ctx, xnet_socket_t *s) {
         return;
     }
     s->closing = true;
+}
+
+int
+xnet_udp_listen(xnet_context_t *ctx, const char *host, int port, xnet_socket_t **socket_out) {
+
+}
+int
+xnet_udp_create(xnet_context_t *ctx, xnet_socket_t **socket_out) {
+
+}
+int
+xnet_udp_set(xnet_context_t *ctx, char *host, int port) {
+
+}
+
+void
+xnet_exit(xnet_context_t *ctx) {
+    ctx->to_quit = true;
 }
 
 static void
@@ -376,7 +395,7 @@ xnet_dispatch_loop(xnet_context_t *ctx) {
     xnet_timeinfo_t ti;
     int timeout = -1;
 
-    while (1) {
+    while (!ctx->to_quit) {
         while (has_cmd(ctx)) {
             ret = ctrl_cmd(ctx);
             if (ret == 0) {
@@ -462,13 +481,17 @@ xnet_dispatch_loop(xnet_context_t *ctx) {
 
 //只能在主线程使用
 void
-xnet_send_buffer(xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int sz) {
+xnet_send_tcp_buffer(xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int sz) {
     if (s->type == SOCKET_TYPE_INVALID || s->closing)
         return;
     char *new_buffer = (char*)malloc(sz);
     memcpy(new_buffer, buffer, sz);
     append_send_buff(&ctx->poll, s, new_buffer, sz);
 }
+
+void xnet_send_udp_buffer(xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int sz);
+
+
 
 int
 xnet_send_command(xnet_context_t *ctx, xnet_context_t *source, int command, void *data, int sz) {
@@ -490,11 +513,18 @@ xnet_send_command(xnet_context_t *ctx, xnet_context_t *source, int command, void
 
 
 int
-xnet_asyn_listen(xnet_context_t *ctx, xnet_context_t *source, int port, int back_command) {
+xnet_asyn_listen(xnet_context_t *ctx, xnet_context_t *source, const char *host, int port, int backlog, int back_command) {
     xnet_cmdreq_t req;
+    if (host && ((strlen(host) + sizeof(xnet_cmdreq_listen_t)) > 255))
+        return -1;
+
     req.pkg.listen_req.source = source;
     req.pkg.listen_req.back_command = back_command;
     req.pkg.listen_req.port = port;
+    req.pkg.listen_req.backlog = backlog;
+    if (host) strcpy(req.pkg.listen_req.host, host);
+    else *(req.pkg.listen_req.host) = 0;
+
     send_cmd(ctx, &req, CMD_TYPE_LISTEN, sizeof(xnet_cmdreq_listen_t));
     return 0;
 }

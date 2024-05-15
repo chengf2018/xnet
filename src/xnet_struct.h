@@ -20,6 +20,7 @@ typedef int (*xnet_command_func_t)(struct xnet_context_t *ctx, struct xnet_conte
 
 typedef struct xnet_context_t {
 	int id;
+	bool to_quit;
 	xnet_poll_t poll;
 	xnet_timeheap_t th;
 	uint64_t nowtime;
@@ -40,6 +41,8 @@ typedef struct {
 	xnet_context_t *source;
 	int back_command;
 	int port;
+	int backlog;
+	char host[0];
 } xnet_cmdreq_listen_t;
 
 typedef struct {
