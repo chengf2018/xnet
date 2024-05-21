@@ -10,9 +10,9 @@
 struct xnet_context_t;
 
 typedef void (*xnet_connect_func_t)(struct xnet_context_t *ctx, xnet_socket_t *s, int error);
-typedef void (*xnet_listen_func_t)(struct xnet_context_t *ctx, xnet_socket_t *s, xnet_socket_t *ns);
+typedef void (*xnet_listen_func_t)(struct xnet_context_t *ctx, xnet_socket_t *s, xnet_socket_t *ns, xnet_addr_t *addr_info);
 //recv_func返回0表示自动释放，返回其他值表示接管buffer，自行释放
-typedef int (*xnet_recv_func_t)(struct xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int size);
+typedef int (*xnet_recv_func_t)(struct xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int size, xnet_addr_t *addr_info);
 typedef void (*xnet_error_func_t)(struct xnet_context_t *ctx, xnet_socket_t *s, short what);
 typedef void (*xnet_timeout_func_t)(struct xnet_context_t *ctx, int id);
 //返回0表示自动释放，返回其他值表示接管data，自行释放

@@ -1,12 +1,15 @@
 #include "xnet.h"
 #include "xnet_config.h"
+#include "xnet_util.h"
 
 #include <pthread.h>
 static xnet_context_t *g_worker_ctx = NULL;
 
 static void
-listen_func(xnet_context_t *ctx, xnet_socket_t *s, xnet_socket_t *ns) {
-	xnet_error(ctx, "-----socket [%d] accept new, new socket:[%d]", s->id, ns->id);
+listen_func(xnet_context_t *ctx, xnet_socket_t *s, xnet_socket_t *ns, xnet_addr_t *addr_info) {
+    char str[64] = {0};
+    xnet_addrtoa(addr_info, str);
+	xnet_error(ctx, "-----socket [%d] accept new, new socket:[%d], [%s]", s->id, ns->id, str);
 }
 
 static void
@@ -15,13 +18,13 @@ error_func(xnet_context_t *ctx, xnet_socket_t *s, short what) {
 }
 
 static int
-recv_func(xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int size) {
+recv_func(xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int size, xnet_addr_t *addr_info) {
     char *str = malloc(size+1);
     memcpy(str, buffer, size);
     str[size] = '\0';
 
 	xnet_error(ctx, "-----socket [%d] recv buffer [%s], size[%d]", s->id, str, size);
-	xnet_send_tcp_buffer(ctx, s, buffer, size);
+	xnet_tcp_send_buffer(ctx, s, buffer, size);
     free(str);
     if (g_worker_ctx) {
         xnet_send_command(g_worker_ctx, ctx, 1, buffer, size);

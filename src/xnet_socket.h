@@ -27,6 +27,7 @@
 
 #define MIN_READ_SIZE 512
 #define MAX_CLIENT_NUM 65536
+#define MAX_UDP_PACKAGE 65535
 
 //socket type:
 #define SOCKET_TYPE_INVALID 0
@@ -38,13 +39,35 @@
 //protocol type:
 #define SOCKET_PROTOCOL_TCP 1
 #define SOCKET_PROTOCOL_UDP 2
+#define SOCKET_PROTOCOL_UDP_IPV6 3
 
-typedef struct write_buffer{
+//addr type:
+#define SOCKET_ADDR_TYPE_IPV4 1
+#define SOCKET_ADDR_TYPE_IPV6 2
+
+union sockaddr_all {
+    struct sockaddr s;
+    struct sockaddr_in v4;
+    struct sockaddr_in6 v6;
+};
+
+typedef struct {
+    uint8_t type;//ipv4 ipv6
+    uint16_t port;
+    uint8_t addr[16];
+} xnet_addr_t;
+
+typedef struct write_buffer {
     struct write_buffer *next;
     char *buffer;
     char *ptr;
     int sz;
 } xnet_write_buff_t;
+
+typedef struct {
+    xnet_write_buff_t wb;
+    xnet_addr_t udp_addr;
+} xnet_udp_wirte_buff_t;
 
 typedef struct {
     xnet_write_buff_t *head;
@@ -56,13 +79,14 @@ typedef struct {
 	int type;
 	int id;
     int read_size;
-    uint8_t protocol;//1tcp 2udp
+    uint8_t protocol;//1tcp 2udp 3udp_v6
     bool reading;
     bool writing;
     bool closing;
     //发送缓冲区
     xnet_wb_list_t wb_list;
     int64_t wb_size;
+    xnet_addr_t addr_info;
 } xnet_socket_t;
 
 typedef struct {
@@ -103,6 +127,8 @@ typedef struct {
 	SOCKET_TYPE recv_fd;
 	SOCKET_TYPE send_fd;
     fd_set rfds;
+
+    char udp_buffer[MAX_UDP_PACKAGE];
 } xnet_poll_t;
 
 
@@ -119,6 +145,7 @@ int xnet_enable_read(xnet_poll_t *poll, xnet_socket_t *s, bool enable);
 int xnet_enable_write(xnet_poll_t *poll, xnet_socket_t *s, bool enable);
 
 int xnet_recv_data(xnet_poll_t *poll, xnet_socket_t *s, char **out_data);
+int xnet_recv_udp_data(xnet_poll_t *poll, xnet_socket_t *s, xnet_addr_t *addr_out);
 int xnet_send_data(xnet_poll_t *poll, xnet_socket_t *s);
 
 int xnet_listen_tcp_socket(xnet_poll_t *poll, const char *host, int port, int backlog, xnet_socket_t **socket_out);
@@ -126,18 +153,21 @@ int xnet_accept_tcp_socket(xnet_poll_t *poll, xnet_socket_t *listen_s, xnet_sock
 int xnet_connect_tcp_socket(xnet_poll_t *poll, const char *host, int port, xnet_socket_t **socket_out);
 
 int xnet_listen_udp_socket(xnet_poll_t *poll, const char *host, int port, xnet_socket_t **socket_out);
-int xnet_create_udp_socket(xnet_poll_t *poll, xnet_socket_t **socket_out);
-int xnet_set_udp_socket_addr(xnet_poll_t *poll);
+int xnet_create_udp_socket(xnet_poll_t *poll, int protocol, xnet_socket_t **socket_out);
+int xnet_set_udp_socket_addr(xnet_poll_t *poll, xnet_socket_t *s, const char *host, int port);
+int xnet_udp_connect(xnet_poll_t *poll, xnet_socket_t * s, const char *host, int port);
+
+void xnet_addrtoa(xnet_addr_t *addr, char str[64]);
 
 //以下接口不希望对外提供
 bool wb_list_empty(xnet_socket_t *s);
 void set_nonblocking(SOCKET_TYPE fd);
 void set_keepalive(SOCKET_TYPE fd);
 void append_send_buff(xnet_poll_t *poll, xnet_socket_t *s, char *buffer, int sz);
+void append_udp_send_buff(xnet_poll_t *poll, xnet_socket_t *s, xnet_addr_t *addr, char *buffer, int sz);
 void block_recv(SOCKET_TYPE fd, void *buffer, int sz);
 void block_send(SOCKET_TYPE fd, void *buffer, int sz);
 int get_sockopt(SOCKET_TYPE fd, int level, int optname, int *optval, int *optlen);
-
 
 
 #endif //_XNET_SOCKET_H_

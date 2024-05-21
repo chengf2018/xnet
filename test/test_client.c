@@ -19,7 +19,7 @@ error_func(struct xnet_context_t *ctx, xnet_socket_t *s, short what) {
 }
 
 static int
-recv_func(struct xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int size) {
+recv_func(struct xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int size, xnet_addr_t *addr_info) {
 	xnet_error(ctx, "-----socket [%d] recv buffer[%s], size[%d]", s->id, buffer, size);
     return 0;
 }
@@ -32,7 +32,7 @@ timeout_func(struct xnet_context_t *ctx, int id) {
         xnet_add_timer(ctx, 1, 2000);
         if (g_s) {
             xnet_error(ctx, "send buffer");
-            xnet_send_tcp_buffer(ctx, g_s, buffer, sizeof(buffer));
+            xnet_tcp_send_buffer(ctx, g_s, buffer, sizeof(buffer));
         }
     } else if (id == 2) {
         xnet_error(ctx, "try connect server");

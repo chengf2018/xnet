@@ -191,4 +191,22 @@ poll_wait(xnet_poll_t *poll, int timeout) {
     return n;
 }
 
+const char*
+inet_ntop(int af, const void* src, char* dst, int size) {
+    struct sockaddr_storage src_addr;
+
+    ZeroMemory(&src_addr, sizeof(struct sockaddr_storage));
+    src_addr.ss_family = af;
+
+    if (af == AF_INET6)
+        ((struct sockaddr_in6*)&src_addr)->sin6_addr = *(struct in6_addr*)src;
+    else if (af == AF_INET)
+        ((struct sockaddr_in*)&src_addr)->sin_addr = *(struct in_addr*)src;
+
+    if (WSAAddressToString((struct sockaddr*)&src_addr, sizeof(src_addr), 0, dst, (LPDWORD)&size) != 0)
+        return NULL; // call failed
+
+    return dst;
+}
+
 #endif //_SOCKET_WIN_H_

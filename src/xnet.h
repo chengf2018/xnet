@@ -6,7 +6,7 @@
 #include <string.h>
 
 #include "xnet_struct.h"
-#include "xnet_util.h"
+
 
 
 int xnet_init(xnet_init_config_t *config);
@@ -31,12 +31,13 @@ int xnet_dispatch_loop(xnet_context_t *ctx);
 //以下接口只能在主线程使用
 int xnet_tcp_connect(xnet_context_t *ctx, const char *host, int port, xnet_socket_t **socket_out);//异步，通过connected事件回调
 int xnet_tcp_listen(xnet_context_t *ctx, const char *host, int port, int backlog, xnet_socket_t **socket_out);
-void xnet_send_tcp_buffer(xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int sz);
+void xnet_tcp_send_buffer(xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int sz);
 
 int xnet_udp_listen(xnet_context_t *ctx, const char *host, int port, xnet_socket_t **socket_out);
-int xnet_udp_create(xnet_context_t *ctx, xnet_socket_t **socket_out);
-int xnet_udp_set(xnet_context_t *ctx, char *host, int port);
-void xnet_send_udp_buffer(xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int sz);
+void xnet_udp_sendto(xnet_context_t *ctx, xnet_socket_t *s, xnet_addr_t *recv_addr, char *buffer, int sz);
+int xnet_udp_create(xnet_context_t *ctx, int protocol, xnet_socket_t **socket_out);
+int xnet_udp_set_addr(xnet_context_t *ctx, xnet_socket_t *s, const char *host, int port);
+void xnet_udp_send_buffer(xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int sz);
 
 void xnet_close_socket(xnet_context_t *ctx, xnet_socket_t *s);
 int xnet_add_timer(xnet_context_t *ctx, int id, int timeout);

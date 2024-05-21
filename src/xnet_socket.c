@@ -21,6 +21,36 @@ get_last_error() {
 #endif
 }
 
+static void
+xnet_gen_addr(int type, union sockaddr_all *sa, xnet_addr_t *addr_out) {
+    if (type == SOCKET_ADDR_TYPE_IPV4) {
+        addr_out->type = SOCKET_ADDR_TYPE_IPV4;
+        addr_out->port = sa->v4.sin_port;
+        memcpy(addr_out->addr, &sa->v4.sin_addr, sizeof(sa->v4.sin_addr));
+    } else {
+        addr_out->type = SOCKET_ADDR_TYPE_IPV6;
+        addr_out->port = sa->v6.sin6_port;
+        memcpy(addr_out->addr, &sa->v6.sin6_addr, sizeof(sa->v6.sin6_addr));
+    }
+}
+
+static socklen_t
+xnet_addr_to_sockaddr(xnet_addr_t *addr, union sockaddr_all *sa) {
+    if (addr->type == SOCKET_ADDR_TYPE_IPV4) {
+        memset(&sa->v4, 0, sizeof(sa->v4));
+        sa->s.sa_family = AF_INET;
+        sa->v4.sin_port = addr->port;
+        memcpy(&sa->v4.sin_addr, &addr->addr, sizeof(sa->v4.sin_addr));
+        return sizeof(sa->v4);
+    } else {
+        memset(&sa->v6, 0, sizeof(sa->v6));
+        sa->s.sa_family = AF_INET6;
+        sa->v6.sin6_port = addr->port;
+        memcpy(&sa->v6.sin6_addr, &addr->addr, sizeof(sa->v6.sin6_addr));
+        return sizeof(sa->v6);
+    }
+}
+
 static int
 alloc_socket_id(xnet_poll_t *poll) {
     int i, id;
@@ -47,6 +77,7 @@ new_fd(xnet_poll_t *poll, SOCKET_TYPE fd, int id, uint8_t protocol, bool reading
     s->read_size = MIN_READ_SIZE;
     assert(s->wb_list.head == NULL && s->wb_list.tail == NULL);
     s->wb_size = 0;
+    memset(&s->addr_info, 0, sizeof(s->addr_info));
 
     xnet_poll_addfd(poll, fd, id);
     xnet_enable_read(poll, s, reading);
@@ -121,6 +152,7 @@ xnet_poll_init(xnet_poll_t *poll) {
         s->type = SOCKET_TYPE_INVALID;
         s->wb_list.head = s->wb_list.tail = NULL;
         s->wb_size = 0;
+        memset(&s->addr_info, 0, sizeof(s->addr_info));
     }
 
     //pipe
@@ -305,13 +337,13 @@ FAILED:
 
 int
 xnet_accept_tcp_socket(xnet_poll_t *poll, xnet_socket_t *listen_s, xnet_socket_t **socket_out) {
-    struct sockaddr_in client_addr;
+    union sockaddr_all client_addr;
     xnet_socket_t *s;
     socklen_t client_addrlen = sizeof(client_addr);
     SOCKET_TYPE fd = 0;
     int id;
     
-    if ((fd = accept(listen_s->fd, (struct sockaddr*)&client_addr, &client_addrlen)) == -1) {
+    if ((fd = accept(listen_s->fd, &client_addr.s, &client_addrlen)) == -1) {
         return -1;
     }
 
@@ -322,6 +354,11 @@ xnet_accept_tcp_socket(xnet_poll_t *poll, xnet_socket_t *listen_s, xnet_socket_t
 
     set_nonblocking(fd);
     set_keepalive(fd);
+
+    if (client_addrlen == sizeof(client_addr.v4))
+        xnet_gen_addr(SOCKET_ADDR_TYPE_IPV4, &client_addr, &s->addr_info);
+    else
+        xnet_gen_addr(SOCKET_ADDR_TYPE_IPV6, &client_addr, &s->addr_info);
 
     if (socket_out) *socket_out = s;
     return 0;
@@ -407,13 +444,15 @@ int
 xnet_listen_udp_socket(xnet_poll_t *poll, const char *host, int port, xnet_socket_t **socket_out) {
     xnet_socket_t *s;
     SOCKET_TYPE fd;
-    int id, family;
+    int id, family, protocol;
     fd = do_bind(host, port, IPPROTO_UDP, &family);
     if (fd < 0) return -1;
 
     id = alloc_socket_id(poll);
     if (id == -1) goto FAILED;
-    s = new_fd(poll, fd, id, SOCKET_PROTOCOL_UDP, true);
+    
+    protocol = (family == AF_INET6) ? SOCKET_PROTOCOL_UDP_IPV6 : SOCKET_PROTOCOL_UDP;
+    s = new_fd(poll, fd, id, protocol, true);
     s->type = SOCKET_TYPE_CONNECTED;
     set_nonblocking(fd);
     if (socket_out) *socket_out = s;
@@ -424,16 +463,23 @@ FAILED:
 }
 
 int
-xnet_create_udp_socket(xnet_poll_t *poll, xnet_socket_t **socket_out) {
+xnet_create_udp_socket(xnet_poll_t *poll, int protocol, xnet_socket_t **socket_out) {
     xnet_socket_t *s;
     SOCKET_TYPE fd;
-    int id;
-    fd = socket(AF_INET, SOCK_DGRAM, 0);
+    int id, family;
+    if (protocol == SOCKET_PROTOCOL_UDP){
+        family = AF_INET;
+    } else if (protocol == SOCKET_PROTOCOL_UDP_IPV6) {
+        family = AF_INET6;
+    } else {
+        return -1;
+    }
+    fd = socket(family, SOCK_DGRAM, 0);
     if (fd < 0) return -1;
 
     id = alloc_socket_id(poll);
     if (id == -1) goto FAILED;
-    s = new_fd(poll, fd, id, SOCKET_PROTOCOL_UDP, true);
+    s = new_fd(poll, fd, id, protocol, true);
     s->type = SOCKET_TYPE_CONNECTED;
     set_nonblocking(fd);
 
@@ -443,9 +489,45 @@ FAILED:
     if (fd) closesocket(fd);
     return -1;
 }
-int
-xnet_set_udp_socket_addr(xnet_poll_t *poll) {
 
+int
+xnet_set_udp_socket_addr(xnet_poll_t *poll, xnet_socket_t *s, const char *host, int port) {
+    int status, protocol, addr_type;
+    struct addrinfo ai_hints;
+    struct addrinfo *ai_list = NULL;
+    char str_port[16];
+
+    sprintf(str_port, "%d", port);
+    memset(&ai_hints, 0, sizeof(ai_hints));
+    ai_hints.ai_family = AF_UNSPEC;
+    ai_hints.ai_socktype = SOCK_DGRAM;
+    ai_hints.ai_protocol = IPPROTO_UDP;
+
+    status = getaddrinfo(host, str_port, &ai_hints, &ai_list);
+    if ( status != 0 ) {
+        return -1;
+    }
+
+    if (ai_list->ai_family == AF_INET) {
+        protocol = SOCKET_PROTOCOL_UDP;
+        addr_type = SOCKET_ADDR_TYPE_IPV4;
+    } else if (ai_list->ai_family = AF_INET6) {
+        protocol = SOCKET_PROTOCOL_UDP_IPV6;
+        addr_type = SOCKET_ADDR_TYPE_IPV6;
+    } else {
+        freeaddrinfo(ai_list);
+        return -1;
+    }
+
+    if (s->protocol != protocol) {
+        freeaddrinfo(ai_list);
+        return -1;
+    }
+
+    xnet_gen_addr(addr_type, (union sockaddr_all *)ai_list->ai_addr, &s->addr_info);
+
+    freeaddrinfo(ai_list);
+    return 0;
 }
 
 //返回-2，socket已关闭
@@ -490,11 +572,32 @@ xnet_recv_data(xnet_poll_t *poll, xnet_socket_t *s, char **out_data) {
 }
 
 int
-xnet_send_data(xnet_poll_t *poll, xnet_socket_t *s) {
+xnet_recv_udp_data(xnet_poll_t *poll, xnet_socket_t *s, xnet_addr_t *addr_out) {
+    union sockaddr_all sa;
+    socklen_t slen = sizeof(sa);
+    int n, err;
+
+    n = recvfrom(s->fd, poll->udp_buffer, MAX_UDP_PACKAGE, 0, &sa.s, &slen);
+    if (n < 0)
+        return -1;
+
+    if (slen == sizeof(sa.v4)) {
+        if (s->protocol != SOCKET_PROTOCOL_UDP)
+            return -1;
+        xnet_gen_addr(SOCKET_ADDR_TYPE_IPV4, &sa, addr_out);
+    } else {
+        if (s->protocol != SOCKET_PROTOCOL_UDP_IPV6)
+            return -1;
+        xnet_gen_addr(SOCKET_ADDR_TYPE_IPV6, &sa, addr_out);
+    }
+    return n;
+}
+
+static int
+send_tcp_data(xnet_poll_t *poll, xnet_socket_t *s) {
     xnet_wb_list_t *wb_list = &s->wb_list;
     xnet_write_buff_t *wb;
     int n, err;
-
     while (wb_list->head) {
         wb = wb_list->head;
         for (;;) {
@@ -529,6 +632,52 @@ xnet_send_data(xnet_poll_t *poll, xnet_socket_t *s) {
     return -1;
 }
 
+static int
+send_udp_data(xnet_poll_t *poll, xnet_socket_t *s) {
+    xnet_wb_list_t *wb_list = &s->wb_list;
+    xnet_udp_wirte_buff_t *udp_wb;
+    int n, err;
+    union sockaddr_all sa;
+    socklen_t sasz;
+
+    while (wb_list->head) {
+        udp_wb = (xnet_udp_wirte_buff_t*)wb_list->head;
+        sasz = xnet_addr_to_sockaddr(&udp_wb->udp_addr, &sa);
+        n = sendto(s->fd, udp_wb->wb.ptr, udp_wb->wb.sz, 0, &sa.s, sasz);
+        if (n < 0) {
+            err = get_last_error();
+            if (err == XNET_EINTR || XNET_HAVR_WOULDBLOCK(err)) return -1;
+            xnet_enable_write(poll, s, false);
+            return -1;
+        }
+        s->wb_size -= n;
+        if (n != udp_wb->wb.sz) {
+            udp_wb->wb.ptr += n;
+            udp_wb->wb.sz -= n;
+            return -1;
+        }
+        wb_list->head = udp_wb->wb.next;
+        free_wb((xnet_write_buff_t*)udp_wb);
+    }
+
+    if (s->closing) {
+        xnet_poll_closefd(poll, s);
+    } else {
+        //发送完了,禁用写事件
+        xnet_enable_write(poll, s, false);
+    }
+
+    return -1;
+}
+
+int
+xnet_send_data(xnet_poll_t *poll, xnet_socket_t *s) {
+    if (s->protocol == SOCKET_PROTOCOL_TCP)
+        return send_tcp_data(poll, s);
+    else
+        return send_udp_data(poll, s);
+}
+
 void
 append_send_buff(xnet_poll_t *poll, xnet_socket_t *s, char *buffer, int sz) {
     xnet_write_buff_t *wb = (xnet_write_buff_t *)malloc(sizeof(xnet_write_buff_t));
@@ -538,6 +687,19 @@ append_send_buff(xnet_poll_t *poll, xnet_socket_t *s, char *buffer, int sz) {
     insert_wb_list(&s->wb_list, wb);
     s->wb_size += sz;
 
+    xnet_enable_write(poll, s, true);
+}
+
+void
+append_udp_send_buff(xnet_poll_t *poll, xnet_socket_t *s, xnet_addr_t *addr, char *buffer, int sz) {
+    xnet_udp_wirte_buff_t *udp_wb = (xnet_udp_wirte_buff_t *)malloc(sizeof(xnet_udp_wirte_buff_t));
+    udp_wb->wb.buffer = udp_wb->wb.ptr = buffer;
+    udp_wb->wb.sz = sz;
+    udp_wb->wb.next = NULL;
+    memcpy(&udp_wb->udp_addr, addr, sizeof(xnet_addr_t));
+    insert_wb_list(&s->wb_list, (xnet_write_buff_t*)udp_wb);
+
+    s->wb_size += sz;
     xnet_enable_write(poll, s, true);
 }
 
@@ -582,4 +744,18 @@ get_sockopt(SOCKET_TYPE fd, int level, int optname, int *optval, int *optlen) {
 #else
     return getsockopt(fd, level, optname, optval, optlen);
 #endif
+}
+
+void
+xnet_addrtoa(xnet_addr_t *addr, char str[64]) {
+//ipv6 exmple: [2001:0db8:85a3:0000:0000:8a2e:0370:7334]:65535
+//ipv4 exmple: 255.255.255.255:65535
+    char tmp[INET6_ADDRSTRLEN];
+    if (addr->type == SOCKET_ADDR_TYPE_IPV4) {
+        inet_ntop(AF_INET, addr->addr, tmp, sizeof(tmp));
+        sprintf(str, "%s:%d", tmp, addr->port);
+    } else {
+        inet_ntop(AF_INET6, addr->addr, tmp, sizeof(tmp));
+        sprintf(str, "%s:%d", tmp, addr->port);
+    }
 }

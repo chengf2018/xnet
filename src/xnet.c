@@ -1,4 +1,5 @@
 #include "xnet.h"
+#include "xnet_util.h"
 #include <assert.h>
 #include <pthread.h>
 
@@ -341,6 +342,15 @@ xnet_tcp_connect(xnet_context_t *ctx, const char *host, int port, xnet_socket_t 
 }
 
 void
+xnet_tcp_send_buffer(xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int sz) {
+    if (s->type == SOCKET_TYPE_INVALID || s->closing)
+        return;
+    char *new_buffer = (char*)malloc(sz);
+    memcpy(new_buffer, buffer, sz);
+    append_send_buff(&ctx->poll, s, new_buffer, sz);
+}
+
+void
 xnet_close_socket(xnet_context_t *ctx, xnet_socket_t *s) {
     //主动关闭连接
     if (wb_list_empty(s)) {
@@ -352,15 +362,35 @@ xnet_close_socket(xnet_context_t *ctx, xnet_socket_t *s) {
 
 int
 xnet_udp_listen(xnet_context_t *ctx, const char *host, int port, xnet_socket_t **socket_out) {
-
+    return xnet_listen_udp_socket(&ctx->poll, host, port, socket_out);
 }
-int
-xnet_udp_create(xnet_context_t *ctx, xnet_socket_t **socket_out) {
 
+int
+xnet_udp_create(xnet_context_t *ctx, int protocol, xnet_socket_t **socket_out) {
+    return xnet_create_udp_socket(&ctx->poll, protocol, socket_out);
 }
-int
-xnet_udp_set(xnet_context_t *ctx, char *host, int port) {
 
+int
+xnet_udp_set_addr(xnet_context_t *ctx, xnet_socket_t *s, const char *host, int port) {
+    return xnet_set_udp_socket_addr(&ctx->poll, s, host, port);
+}
+
+void
+xnet_udp_sendto(xnet_context_t *ctx, xnet_socket_t *s, xnet_addr_t *recv_addr, char *buffer, int sz) {
+    if (s->type == SOCKET_TYPE_INVALID || s->closing)
+        return;
+    char *new_buffer = (char*)malloc(sz);
+    memcpy(new_buffer, buffer, sz);
+    append_udp_send_buff(&ctx->poll, s, recv_addr, new_buffer, sz);
+}
+
+void
+xnet_udp_send_buffer(xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int sz) {
+    if (s->type == SOCKET_TYPE_INVALID || s->closing)
+        return;
+    char *new_buffer = (char*)malloc(sz);
+    memcpy(new_buffer, buffer, sz);
+    append_udp_send_buff(&ctx->poll, s, &s->addr_info, new_buffer, sz);
 }
 
 void
@@ -385,13 +415,43 @@ deal_with_connected(xnet_context_t *ctx, xnet_socket_t *s) {
     ctx->connect_func(ctx, s, 0);
 }
 
+static void
+deal_with_tcp_message(xnet_context_t *ctx, xnet_socket_t *s) {
+    char *buffer;
+    int n;
+
+    n = xnet_recv_data(&ctx->poll, s, &buffer);
+    if (n > 0) {
+        if (ctx->recv_func(ctx, s, buffer, n, &s->addr_info) == 0)
+            free(buffer);
+        buffer = NULL;
+    } else if (n < 0) {
+        ctx->error_func(ctx, s, 0);
+        xnet_poll_closefd(&ctx->poll, s);
+    }
+}
+
+static void
+deal_with_udp_message(xnet_context_t *ctx, xnet_socket_t *s) {
+    int n;
+    xnet_addr_t addr_info;
+
+    n = xnet_recv_udp_data(&ctx->poll, s, &addr_info);
+    if (n >= 0) {
+        ctx->recv_func(ctx, s, ctx->poll.udp_buffer, n, &addr_info);
+    } else {
+        ctx->error_func(ctx, s, 0);
+        xnet_poll_closefd(&ctx->poll, s);
+    }
+}
+
 int
 xnet_dispatch_loop(xnet_context_t *ctx) {
     int ret, i;
     xnet_poll_event_t *poll_event = &ctx->poll.poll_event;
     xnet_poll_t *poll = &ctx->poll;
     xnet_socket_t *s, *ns;
-    char *buffer;
+    
     xnet_timeinfo_t ti;
     int timeout = -1;
 
@@ -430,7 +490,7 @@ xnet_dispatch_loop(xnet_context_t *ctx) {
             if (s->type == SOCKET_TYPE_LISTENING) {
                 ns = NULL;
                 if (xnet_accept_tcp_socket(poll, s, &ns) == 0) {
-                    ctx->listen_func(ctx, s, ns);
+                    ctx->listen_func(ctx, s, ns, &ns->addr_info);
                 } else {
                     xnet_error(ctx, "accept tcp socket have error:%d", s->id);
                 }
@@ -440,15 +500,10 @@ xnet_dispatch_loop(xnet_context_t *ctx) {
                 if (poll_event->read[i]) {
                     //输入缓存区有可读数据；处于监听状态，有连接到达；出错
                     xnet_error(ctx, "read event[%d]", s->id);
-                    ret = xnet_recv_data(poll, s, &buffer);
-                    if (ret > 0) {
-                        if (ctx->recv_func(ctx, s, buffer, ret) == 0)
-                            free(buffer);
-                        buffer = NULL;
-                    } else if (ret < 0) {
-                        ctx->error_func(ctx, s, 0);
-                        xnet_poll_closefd(poll, s);
-                    }
+                    if (s->protocol == SOCKET_PROTOCOL_TCP)
+                        deal_with_tcp_message(ctx, s);
+                    else
+                        deal_with_udp_message(ctx, s);
                 }
 
                 if (poll_event->write[i]) {
@@ -480,16 +535,9 @@ xnet_dispatch_loop(xnet_context_t *ctx) {
 }
 
 //只能在主线程使用
-void
-xnet_send_tcp_buffer(xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int sz) {
-    if (s->type == SOCKET_TYPE_INVALID || s->closing)
-        return;
-    char *new_buffer = (char*)malloc(sz);
-    memcpy(new_buffer, buffer, sz);
-    append_send_buff(&ctx->poll, s, new_buffer, sz);
-}
 
-void xnet_send_udp_buffer(xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int sz);
+
+
 
 
 

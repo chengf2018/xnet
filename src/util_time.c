@@ -51,10 +51,11 @@ get_time() {
 #ifdef _WIN32
 	#define localtime_r(a,b) localtime_s((b), (a))
 #endif
+
 void
 timestring(uint64_t time, char *out, int size) {
 	struct tm info;
 	time_t ti = time;
 	localtime_r(&ti, &info);
-	strftime(out, size, "%d/%m/%y %H:%M:%S", &info);
+	strftime(out, size, "%Y/%m/%d %H:%M:%S", &info);
 }
