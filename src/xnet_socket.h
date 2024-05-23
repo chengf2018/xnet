@@ -132,7 +132,7 @@ typedef struct {
 } xnet_poll_t;
 
 
-
+int get_last_error();
 int xnet_socket_init();
 int xnet_socket_deinit();
 int xnet_poll_init(xnet_poll_t *poll);

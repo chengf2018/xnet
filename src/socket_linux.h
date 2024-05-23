@@ -56,7 +56,7 @@ poll_enable_write(xnet_poll_t *poll, xnet_socket_t *s, bool enable) {
 
 	ev.events = (s->reading ? EPOLLIN : 0) | (enable ? EPOLLOUT : 0);
 	ev.data.ptr = s;
-printf("socket [%d] poll_enable_write, [%d,%d]\n", s->id, s->reading, enable);
+
 	if (epoll_ctl(poll->epoll_fd, EPOLL_CTL_MOD, s->fd, &ev) == -1) {
 		return 1;
 	}
@@ -71,7 +71,6 @@ poll_enable_read(xnet_poll_t *poll, xnet_socket_t *s, bool enable) {
 	s->reading = enable;    
 	ev.events = (enable ? EPOLLIN : 0) | (s->writing ? EPOLLOUT : 0);
 	ev.data.ptr = s;
-printf("socket [%d] poll_enable_read, [%d,%d]\n", s->id, enable, s->writing);
 	if (epoll_ctl(poll->epoll_fd, EPOLL_CTL_MOD, s->fd, &ev) == -1) {
 		return 1;
 	}

@@ -54,7 +54,7 @@ main(int argc, char** argv) {
     ctx = xnet_create_context();
     xnet_register_connecter(ctx, connected_func, error_func, recv_func);
 
-    xnet_tcp_connect(ctx, "127.0.0.1", 8888, NULL);
+    ret = xnet_tcp_connect(ctx, "127.0.0.1", 8888, NULL);
     if (ret != 0) goto _END;
 
     xnet_register_timeout(ctx, timeout_func);

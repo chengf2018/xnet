@@ -37,7 +37,7 @@ int xnet_udp_listen(xnet_context_t *ctx, const char *host, int port, xnet_socket
 void xnet_udp_sendto(xnet_context_t *ctx, xnet_socket_t *s, xnet_addr_t *recv_addr, char *buffer, int sz);
 int xnet_udp_create(xnet_context_t *ctx, int protocol, xnet_socket_t **socket_out);
 int xnet_udp_set_addr(xnet_context_t *ctx, xnet_socket_t *s, const char *host, int port);
-void xnet_udp_send_buffer(xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int sz);
+void xnet_udp_send_buffer(xnet_context_t *ctx, xnet_socket_t *s, const char *buffer, int sz);
 
 void xnet_close_socket(xnet_context_t *ctx, xnet_socket_t *s);
 int xnet_add_timer(xnet_context_t *ctx, int id, int timeout);

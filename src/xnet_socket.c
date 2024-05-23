@@ -12,7 +12,7 @@
     #include "socket_linux.h"
 #endif
 
-static int
+int
 get_last_error() {
 #ifdef _WIN32
     return WSAGetLastError();
@@ -187,6 +187,9 @@ xnet_poll_init(xnet_poll_t *poll) {
 
 int
 xnet_poll_deinit(xnet_poll_t *poll) {
+    int i;
+    xnet_socket_t *s;
+
 #ifdef _WIN32
     dlink_node_t *tmp;
     while (poll->socket_list) {
@@ -200,6 +203,14 @@ xnet_poll_deinit(xnet_poll_t *poll) {
 
     closesocket(poll->send_fd);
     closesocket(poll->recv_fd);
+
+    for (i=0; i<MAX_CLIENT_NUM; i++) {
+        s = &poll->slots[i];
+        if (s->type == SOCKET_TYPE_INVALID && s->fd) {
+            closesocket(s->fd);
+        }
+        clear_wb_list(&s->wb_list);
+    }
     return 0;
 }
 
@@ -424,13 +435,13 @@ xnet_connect_tcp_socket(xnet_poll_t *poll, const char *host, int port, xnet_sock
     if (socket_out) *socket_out = s;
 
     if (status == 0) {
-        //连接成功
+        //connect success
         s->type = SOCKET_TYPE_CONNECTED;
         freeaddrinfo(ai_list);
         return 1;
     }
 
-    //连接中
+    //connecting
     s->type = SOCKET_TYPE_CONNECTING;
     xnet_enable_write(poll, s, true);
     freeaddrinfo(ai_list);
@@ -455,6 +466,9 @@ xnet_listen_udp_socket(xnet_poll_t *poll, const char *host, int port, xnet_socke
     s = new_fd(poll, fd, id, protocol, true);
     s->type = SOCKET_TYPE_CONNECTED;
     set_nonblocking(fd);
+#ifdef _WIN32
+    disable_udp_resterr(fd);
+#endif
     if (socket_out) *socket_out = s;
     return 0;
 FAILED:
@@ -467,6 +481,7 @@ xnet_create_udp_socket(xnet_poll_t *poll, int protocol, xnet_socket_t **socket_o
     xnet_socket_t *s;
     SOCKET_TYPE fd;
     int id, family;
+
     if (protocol == SOCKET_PROTOCOL_UDP){
         family = AF_INET;
     } else if (protocol == SOCKET_PROTOCOL_UDP_IPV6) {
@@ -482,7 +497,9 @@ xnet_create_udp_socket(xnet_poll_t *poll, int protocol, xnet_socket_t **socket_o
     s = new_fd(poll, fd, id, protocol, true);
     s->type = SOCKET_TYPE_CONNECTED;
     set_nonblocking(fd);
-
+#ifdef _WIN32
+    disable_udp_resterr(fd);
+#endif
     if (socket_out) *socket_out = s;
     return 0;
 FAILED:
@@ -578,8 +595,11 @@ xnet_recv_udp_data(xnet_poll_t *poll, xnet_socket_t *s, xnet_addr_t *addr_out) {
     int n, err;
 
     n = recvfrom(s->fd, poll->udp_buffer, MAX_UDP_PACKAGE, 0, &sa.s, &slen);
-    if (n < 0)
+    if (n < 0) {
+        err = get_last_error();
+printf("-------recvfrom error:[%d]\n", err);
         return -1;
+    }
 
     if (slen == sizeof(sa.v4)) {
         if (s->protocol != SOCKET_PROTOCOL_UDP)
@@ -625,7 +645,7 @@ send_tcp_data(xnet_poll_t *poll, xnet_socket_t *s) {
     if (s->closing) {
         xnet_poll_closefd(poll, s);
     } else {
-        //发送完了,禁用写事件
+        //sending is over,disable write event
         xnet_enable_write(poll, s, false);
     }
 
@@ -644,18 +664,18 @@ send_udp_data(xnet_poll_t *poll, xnet_socket_t *s) {
         udp_wb = (xnet_udp_wirte_buff_t*)wb_list->head;
         sasz = xnet_addr_to_sockaddr(&udp_wb->udp_addr, &sa);
         n = sendto(s->fd, udp_wb->wb.ptr, udp_wb->wb.sz, 0, &sa.s, sasz);
+printf("send_udp_data n:[%d]\n", n);
         if (n < 0) {
             err = get_last_error();
             if (err == XNET_EINTR || XNET_HAVR_WOULDBLOCK(err)) return -1;
-            xnet_enable_write(poll, s, false);
+            
+            //drop it, save other package to try for next time.
+            s->wb_size -= udp_wb->wb.sz;
+            wb_list->head = udp_wb->wb.next;
+            free_wb((xnet_write_buff_t*)udp_wb);
             return -1;
         }
-        s->wb_size -= n;
-        if (n != udp_wb->wb.sz) {
-            udp_wb->wb.ptr += n;
-            udp_wb->wb.sz -= n;
-            return -1;
-        }
+        s->wb_size -= udp_wb->wb.sz;
         wb_list->head = udp_wb->wb.next;
         free_wb((xnet_write_buff_t*)udp_wb);
     }
@@ -663,7 +683,7 @@ send_udp_data(xnet_poll_t *poll, xnet_socket_t *s) {
     if (s->closing) {
         xnet_poll_closefd(poll, s);
     } else {
-        //发送完了,禁用写事件
+        //sending is over,disable write event
         xnet_enable_write(poll, s, false);
     }
 
@@ -707,7 +727,11 @@ void
 block_recv(SOCKET_TYPE fd, void *buffer, int sz) {
     int err, n;
     for (;;) {
+#ifdef _WIN32
         n = recv(fd, buffer, sz, 0);
+#else
+        n = read(fd, buffer, sz);
+#endif
         if (n < 0) {
             err = get_last_error();
             if (err == XNET_EINTR)
@@ -724,11 +748,15 @@ void
 block_send(SOCKET_TYPE fd, void *buffer, int sz) {
     int err, n;
     for (;;) {
+#ifdef _WIN32
         n = send(fd, buffer, sz, 0);
+#else
+        n = write(fd, buffer, sz);
+#endif
         if (n < 0) {
             err = get_last_error();
             if (err != XNET_EINTR) {
-                printf("block_send error:%d\n", err);
+                printf("block_send error:%d, %d, %d, %d\n", err, fd, n, sz);
             }
             continue;
         }

@@ -2,6 +2,7 @@
 #include "xnet_util.h"
 #include <assert.h>
 #include <pthread.h>
+#include <stdarg.h>
 
 #define CMD_TYPE_EXIT 0
 #define CMD_TYPE_LISTEN 1
@@ -23,6 +24,7 @@ static log_context_t g_log_context;
 static int
 log_command_func(xnet_context_t *ctx, xnet_context_t *source, int command, void *data, int sz) {
     char time_str[128];
+printf("log_command_func[%d][%d]\n", g_log_context.stdlog, sz);
     timestring(ctx->nowtime/1000, time_str, sizeof(time_str));
     fprintf(g_log_context.stdlog, "[%d][%s.%03d]:", command, time_str, ctx->nowtime%1000);
     fwrite(data, sz, 1, g_log_context.stdlog);
@@ -34,14 +36,22 @@ log_command_func(xnet_context_t *ctx, xnet_context_t *source, int command, void 
 static void *
 thread_log(void *p) {
     xnet_context_t *ctx = p;
+printf("start log thread[%p]\n", ctx);
     xnet_dispatch_loop(ctx);
+printf("log thread exit[%p]\n", ctx);
+    xnet_release_context(ctx);
+    if (g_log_context.filename)
+        free(g_log_context.filename);
+    if (g_log_context.stdlog != stdout)
+        fclose(g_log_context.stdlog);
 }
 
 static void
 log_init(const char *log_filename) {
-    pthread_t pid;
     xnet_context_t *log_ctx;
     FILE *fp;
+    pthread_t pid;
+    int ret;
 
     g_log_context.filename = NULL;
     g_log_context.stdlog = stdout;
@@ -56,23 +66,30 @@ log_init(const char *log_filename) {
     }
 
     log_ctx = xnet_create_context();
+printf("create log ctx:[%p]\n", log_ctx);
     if (!log_ctx) return;
 
+    pid = 0;
     xnet_register_command(log_ctx, log_command_func);
-    pthread_create(&pid, NULL, thread_log, log_ctx);
-    pthread_detach(pid);
+    ret = pthread_create(&pid, NULL, thread_log, log_ctx);
+    if (ret != 0) {
+        perror("create log thread error");
+        exit(1);
+    }
+
+printf("create pthread[%d,%d]\n", ret, pid);
     g_log_context.log_ctx = log_ctx;
     g_log_context.pid = pid;
 }
 
 static void
 log_deinit() {
-    if (g_log_context.log_ctx)
-        xnet_release_context(g_log_context.log_ctx);
-    if (g_log_context.filename)
-        free(g_log_context.filename);
-    if (g_log_context.stdlog != stdout)
-        fclose(g_log_context.stdlog);
+    if (g_log_context.log_ctx) {
+        xnet_asyn_exit(g_log_context.log_ctx, NULL);
+    }
+    if (g_log_context.pid > 0) {
+        pthread_join(g_log_context.pid, NULL);
+    }
 }
 
 static void
@@ -167,7 +184,7 @@ has_cmd(xnet_context_t *ctx) {
     SOCKET_TYPE recv_fd = ctx->poll.recv_fd;
 
     FD_SET(recv_fd, &ctx->poll.rfds);
-    retval = select(recv_fd, &ctx->poll.rfds, NULL, NULL, &tv);
+    retval = select(recv_fd+1, &ctx->poll.rfds, NULL, NULL, &tv);
     if (retval == 1) {
         return 1;
     }
@@ -183,7 +200,7 @@ ctrl_cmd(xnet_context_t *ctx) {
 
     block_recv(fd, header, sizeof(header));
     type = header[0]; len = header[1];
-printf("ctrl_cmd[%d, %d, %d, %d]\n", type, len, sizeof(header), ctx->id);
+printf("ctrl_cmd[%d, %d, %d]\n", type, len, ctx->id);
     if (len > 0) block_recv(fd, buffer, len);
 
     switch (type) {
@@ -261,6 +278,7 @@ xnet_release_context(xnet_context_t *ctx) {
     free(ctx);
 }
 
+
 #define LOG_MESSAGE_SIZE 256
 void
 xnet_error(xnet_context_t *ctx, char *msg, ...) {
@@ -272,10 +290,10 @@ xnet_error(xnet_context_t *ctx, char *msg, ...) {
     if (!g_log_context.log_ctx) return;
 
     va_start(ap, msg);
-    len = vsnprintf(tmp, sizeof(tmp), msg, ap);
+    len = xnet_vsnprintf(tmp, sizeof(tmp), msg, ap);
     va_end(ap);
-    if (len < 0) return;
-    if (len < LOG_MESSAGE_SIZE) {
+
+    if (len >= 0 && len < LOG_MESSAGE_SIZE) {
         data = strdup(tmp); 
     } else {
         max_size = LOG_MESSAGE_SIZE;
@@ -283,17 +301,21 @@ xnet_error(xnet_context_t *ctx, char *msg, ...) {
             max_size *= 2;
             data = malloc(max_size);
             va_start(ap, msg);
-            len = vsnprintf(data, max_size, msg, ap);
+            len = xnet_vsnprintf(data, max_size, msg, ap);
             va_end(ap);
             if (len < max_size) break;
             free(data);
         }
     }
+
     if (len < 0) {
+        perror("vsnprintf error!!!");
         free(data);
         return;
     }
-    xnet_send_command(g_log_context.log_ctx, ctx, ctx->id, data, len);
+printf("xnet error send command,[%d][%d][%d]\n", ctx->id, g_log_context.log_ctx->id, len);
+    len = xnet_send_command(g_log_context.log_ctx, ctx, ctx->id, data, len);
+printf("send command finish[%d]\n", len);
 }
 
 void
@@ -385,7 +407,7 @@ xnet_udp_sendto(xnet_context_t *ctx, xnet_socket_t *s, xnet_addr_t *recv_addr, c
 }
 
 void
-xnet_udp_send_buffer(xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int sz) {
+xnet_udp_send_buffer(xnet_context_t *ctx, xnet_socket_t *s, const char *buffer, int sz) {
     if (s->type == SOCKET_TYPE_INVALID || s->closing)
         return;
     char *new_buffer = (char*)malloc(sz);
@@ -400,12 +422,12 @@ xnet_exit(xnet_context_t *ctx) {
 
 static void
 deal_with_connected(xnet_context_t *ctx, xnet_socket_t *s) {
-    int error;
-    socklen_t len = sizeof(error);
-    int code = get_sockopt(s->fd, SOL_SOCKET, SO_ERROR, &error, &len);  
-    if (code < 0 || error) {
-        error = code < 0 ? errno : error;
-        ctx->connect_func(ctx, s, error);
+    int err;
+    socklen_t len = sizeof(err);
+    int code = get_sockopt(s->fd, SOL_SOCKET, SO_ERROR, &err, &len);  
+    if (code < 0 || err) {
+        err = code < 0 ? get_last_error() : err;
+        ctx->connect_func(ctx, s, err);
         xnet_poll_closefd(&ctx->poll, s);
         return;
     }
@@ -457,6 +479,9 @@ xnet_dispatch_loop(xnet_context_t *ctx) {
 
     while (!ctx->to_quit) {
         while (has_cmd(ctx)) {
+if (ctx->id == 1) {
+    printf("deal log command\n");
+}
             ret = ctrl_cmd(ctx);
             if (ret == 0) {
                 printf("exit loop\n");
@@ -509,6 +534,7 @@ xnet_dispatch_loop(xnet_context_t *ctx) {
                 if (poll_event->write[i]) {
                     //输出缓冲区可写；连接成功
                     //发送缓冲列表内的数据
+printf("----write event[%d]\n", s->id);
                     xnet_error(ctx, "write event[%d]", s->id);
                     xnet_send_data(&ctx->poll, s);
                 }

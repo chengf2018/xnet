@@ -209,4 +209,16 @@ inet_ntop(int af, const void* src, char* dst, int size) {
     return dst;
 }
 
+#ifndef SIO_UDP_CONNRESET
+#define SIO_UDP_CONNRESET _WSAIOW(IOC_VENDOR,12)
+#endif
+
+void
+disable_udp_resterr(SOCKET_TYPE fd) {
+    BOOL enable_conrest_err = FALSE;
+    DWORD bytes_ret = 0;
+    WSAIoctl(fd, SIO_UDP_CONNRESET, &enable_conrest_err, sizeof(enable_conrest_err), \
+        NULL, 0, &bytes_ret, NULL, NULL);
+}
+
 #endif //_SOCKET_WIN_H_

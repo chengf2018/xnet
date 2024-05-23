@@ -22,10 +22,11 @@
 * 异步日志
 * context生命周期优化，ctx如果被释放？但是还有引用？
 * 配置解析模块，server支持配置传参
-
-## todo list
 * ipv6支持
 * udp支持
+
+## todo list
+* udp测试
 * socket数据包多发优化，共用一个数据包
 * 绑定lua
 * 优化排版
@@ -86,4 +87,5 @@ server初始化配置、代码优化完善
 完善ipv6支持，udp支持
 
 5.21
-完善udp数据收发
+1.完善udp数据收发
+2.修复vsnprintf bug
