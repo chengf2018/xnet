@@ -1,5 +1,6 @@
 #include "xnet.h"
 #include "xnet_util.h"
+#include "malloc_ref.h"
 #include <assert.h>
 #include <pthread.h>
 #include <stdarg.h>
@@ -9,7 +10,8 @@
 #define CMD_TYPE_CLOSE 2
 #define CMD_TYPE_CONNECT 3
 #define CMD_TYPE_SNED_TCP_PKG 4
-#define CMD_TYPE_SEND_UPD_PKG 5
+#define CMD_TYPE_BROADCAST_TCP_PKG 5
+#define CMD_TYPE_SEND_UPD_PKG 6
 #define CMD_TYPE_USER_COMMAND 128
 
 typedef struct {
@@ -24,7 +26,6 @@ static log_context_t g_log_context;
 static int
 log_command_func(xnet_context_t *ctx, xnet_context_t *source, int command, void *data, int sz) {
     char time_str[128];
-printf("log_command_func[%d][%d]\n", g_log_context.stdlog, sz);
     timestring(ctx->nowtime/1000, time_str, sizeof(time_str));
     fprintf(g_log_context.stdlog, "[%d][%s.%03d]:", command, time_str, ctx->nowtime%1000);
     fwrite(data, sz, 1, g_log_context.stdlog);
@@ -36,9 +37,8 @@ printf("log_command_func[%d][%d]\n", g_log_context.stdlog, sz);
 static void *
 thread_log(void *p) {
     xnet_context_t *ctx = p;
-printf("start log thread[%p]\n", ctx);
+
     xnet_dispatch_loop(ctx);
-printf("log thread exit[%p]\n", ctx);
     xnet_release_context(ctx);
     if (g_log_context.filename)
         free(g_log_context.filename);
@@ -66,7 +66,7 @@ log_init(const char *log_filename) {
     }
 
     log_ctx = xnet_create_context();
-printf("create log ctx:[%p]\n", log_ctx);
+
     if (!log_ctx) return;
 
     pid = 0;
@@ -77,7 +77,6 @@ printf("create log ctx:[%p]\n", log_ctx);
         exit(1);
     }
 
-printf("create pthread[%d,%d]\n", ret, pid);
     g_log_context.log_ctx = log_ctx;
     g_log_context.pid = pid;
 }
@@ -159,13 +158,36 @@ cmd_connect(xnet_context_t *ctx, xnet_cmdreq_connect_t *req) {
 
 static void
 cmd_send_tcp_pkg(xnet_context_t *ctx, xnet_cmdreq_sendtcp_t *req) {
+    char *new_buffer;
     xnet_socket_t *s = &ctx->poll.slots[req->id];
     if (s->type == SOCKET_TYPE_INVALID || s->closing) {
         free(req->data);
         return;
     }
+    new_buffer = mf_malloc(req->size);
+    mf_add_ref(new_buffer);
+    memcpy(new_buffer, req->data, req->size);
+    free(req->data);
+    append_send_buff(&ctx->poll, s, new_buffer, req->size);
+}
 
-    append_send_buff(&ctx->poll, s, req->data, req->size);
+static void
+cmd_broad_tcp_pkg(xnet_context_t *ctx, xnet_cmdreq_broadtcp_t *req) {
+    char *new_buffer;
+    xnet_socket_t *s;
+    int i, n;
+    n = *(req->ids);
+    new_buffer = mf_malloc(req->size);
+    memcpy(new_buffer, req->data, req->size);
+    for (i=1; i<=n; i++) {
+        s = &ctx->poll.slots[req->ids[i]];
+        if (s->type == SOCKET_TYPE_INVALID || s->closing) continue;
+
+        mf_add_ref(new_buffer);
+        append_send_buff(&ctx->poll, s, new_buffer, req->size);
+    }
+    free(req->ids);
+    free(req->data);
 }
 
 static void
@@ -200,7 +222,7 @@ ctrl_cmd(xnet_context_t *ctx) {
 
     block_recv(fd, header, sizeof(header));
     type = header[0]; len = header[1];
-printf("ctrl_cmd[%d, %d, %d]\n", type, len, ctx->id);
+//printf("ctrl_cmd[%d, %d, %d]\n", type, len, ctx->id);
     if (len > 0) block_recv(fd, buffer, len);
 
     switch (type) {
@@ -217,6 +239,9 @@ printf("ctrl_cmd[%d, %d, %d]\n", type, len, ctx->id);
         break;
         case CMD_TYPE_SNED_TCP_PKG:
             cmd_send_tcp_pkg(ctx, (xnet_cmdreq_sendtcp_t *)buffer);
+        break;
+        case CMD_TYPE_BROADCAST_TCP_PKG:
+            cmd_broad_tcp_pkg(ctx, (xnet_cmdreq_broadtcp_t *)buffer);
         break;
         case CMD_TYPE_USER_COMMAND:
             cmd_command(ctx, (xnet_cmdreq_command_t *)buffer);
@@ -313,9 +338,8 @@ xnet_error(xnet_context_t *ctx, char *msg, ...) {
         free(data);
         return;
     }
-printf("xnet error send command,[%d][%d][%d]\n", ctx->id, g_log_context.log_ctx->id, len);
-    len = xnet_send_command(g_log_context.log_ctx, ctx, ctx->id, data, len);
-printf("send command finish[%d]\n", len);
+
+    xnet_send_command(g_log_context.log_ctx, ctx, ctx->id, data, len);
 }
 
 void
@@ -363,13 +387,29 @@ xnet_tcp_connect(xnet_context_t *ctx, const char *host, int port, xnet_socket_t 
     return xnet_connect_tcp_socket(&ctx->poll, host, port, socket_out);
 }
 
+char *
+xnet_send_buffer_malloc(size_t size) {
+    return mf_malloc(size);
+}
+
 void
-xnet_tcp_send_buffer(xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int sz) {
+xnet_send_buffer_free(char *ptr) {
+    mf_free(ptr);
+}
+
+void
+xnet_tcp_send_buffer(xnet_context_t *ctx, xnet_socket_t *s, const char *buffer, int sz, bool raw) {
+    char *send_buffer;
     if (s->type == SOCKET_TYPE_INVALID || s->closing)
         return;
-    char *new_buffer = (char*)malloc(sz);
-    memcpy(new_buffer, buffer, sz);
-    append_send_buff(&ctx->poll, s, new_buffer, sz);
+    if (raw) {
+        send_buffer = (char*)buffer;
+    } else {
+        send_buffer = (char*)mf_malloc(sz);
+        memcpy(send_buffer, buffer, sz);
+    }
+    mf_add_ref(send_buffer);
+    append_send_buff(&ctx->poll, s, send_buffer, sz);
 }
 
 void
@@ -398,21 +438,23 @@ xnet_udp_set_addr(xnet_context_t *ctx, xnet_socket_t *s, const char *host, int p
 }
 
 void
-xnet_udp_sendto(xnet_context_t *ctx, xnet_socket_t *s, xnet_addr_t *recv_addr, char *buffer, int sz) {
+xnet_udp_sendto(xnet_context_t *ctx, xnet_socket_t *s, xnet_addr_t *recv_addr, const char *buffer, int sz, bool raw) {
+    char *send_buffer;
     if (s->type == SOCKET_TYPE_INVALID || s->closing)
         return;
-    char *new_buffer = (char*)malloc(sz);
-    memcpy(new_buffer, buffer, sz);
-    append_udp_send_buff(&ctx->poll, s, recv_addr, new_buffer, sz);
+    if (raw) {
+        send_buffer = (char*)buffer;
+    } else {
+        send_buffer = (char*)malloc(sz);
+        memcpy(send_buffer, buffer, sz);
+    }
+    mf_add_ref(send_buffer);
+    append_udp_send_buff(&ctx->poll, s, recv_addr, send_buffer, sz);
 }
 
 void
-xnet_udp_send_buffer(xnet_context_t *ctx, xnet_socket_t *s, const char *buffer, int sz) {
-    if (s->type == SOCKET_TYPE_INVALID || s->closing)
-        return;
-    char *new_buffer = (char*)malloc(sz);
-    memcpy(new_buffer, buffer, sz);
-    append_udp_send_buff(&ctx->poll, s, &s->addr_info, new_buffer, sz);
+xnet_udp_send_buffer(xnet_context_t *ctx, xnet_socket_t *s, const char *buffer, int sz, bool raw) {
+    xnet_udp_sendto(ctx, s, &s->addr_info, buffer, sz, raw);
 }
 
 void
@@ -479,9 +521,6 @@ xnet_dispatch_loop(xnet_context_t *ctx) {
 
     while (!ctx->to_quit) {
         while (has_cmd(ctx)) {
-if (ctx->id == 1) {
-    printf("deal log command\n");
-}
             ret = ctrl_cmd(ctx);
             if (ret == 0) {
                 printf("exit loop\n");
@@ -524,7 +563,7 @@ if (ctx->id == 1) {
             } else {
                 if (poll_event->read[i]) {
                     //输入缓存区有可读数据；处于监听状态，有连接到达；出错
-                    xnet_error(ctx, "read event[%d]", s->id);
+                    //xnet_error(ctx, "read event[%d]", s->id);
                     if (s->protocol == SOCKET_PROTOCOL_TCP)
                         deal_with_tcp_message(ctx, s);
                     else
@@ -534,21 +573,20 @@ if (ctx->id == 1) {
                 if (poll_event->write[i]) {
                     //输出缓冲区可写；连接成功
                     //发送缓冲列表内的数据
-printf("----write event[%d]\n", s->id);
-                    xnet_error(ctx, "write event[%d]", s->id);
+                    //xnet_error(ctx, "write event[%d]", s->id);
                     xnet_send_data(&ctx->poll, s);
                 }
 
                 if (poll_event->error[i]) {
                     //异常；带外数据
-                    xnet_error(ctx, "poll event error:%d", s->id);
+                    //xnet_error(ctx, "poll event error:%d", s->id);
                     ctx->error_func(ctx, s, 1);
                     xnet_poll_closefd(&ctx->poll, s);
                 }
 #ifndef _WIN32
                 if (poll_event->eof[i]) {
                     //epoll特有的标记
-                    xnet_error(ctx, "poll event eof:%d", s->id);
+                    //xnet_error(ctx, "poll event eof:%d", s->id);
                     ctx->error_func(ctx, s, 2);
                     xnet_poll_closefd(&ctx->poll, s);
                 }
@@ -618,12 +656,33 @@ xnet_asyn_connect(xnet_context_t *ctx, xnet_context_t *source, char *host, int p
 }
 
 int
-xnet_asyn_send_tcp_buffer(xnet_context_t *ctx, int id, char *buffer, int sz) {
+xnet_asyn_send_tcp_buffer(xnet_context_t *ctx, int id, const char *buffer, int sz) {
     xnet_cmdreq_t req;
     req.pkg.send_tcp_req.id = id;
-    req.pkg.send_tcp_req.data = buffer;//it will free by receiver
+    req.pkg.send_tcp_req.data = (char*)buffer;//it will free by receiver
     req.pkg.send_tcp_req.size = sz;
     send_cmd(ctx, &req, CMD_TYPE_SNED_TCP_PKG, sizeof(xnet_cmdreq_sendtcp_t));
+}
+
+//ids and buffer will free by receiver
+int
+xnet_asyn_broadcast_tcp_buffer(xnet_context_t *ctx, int *ids, const char *buffer, int sz) {
+    xnet_cmdreq_t req;
+    
+    req.pkg.broad_tcp_req.ids = ids;
+    req.pkg.broad_tcp_req.data = (char*)buffer;
+    req.pkg.broad_tcp_req.size = sz;
+    send_cmd(ctx, &req, CMD_TYPE_BROADCAST_TCP_PKG, sizeof(xnet_cmdreq_broadtcp_t));
+}
+
+int
+xnet_asyn_send_udp_buffer(xnet_context_t *ctx, int id, char *buffer, int sz) {
+
+}
+
+int
+xnet_asyn_sendto_udp_buffer(xnet_context_t *ctx, int id, xnet_addr_t *addr, char *buffer, int sz) {
+
 }
 
 int

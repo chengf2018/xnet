@@ -29,10 +29,10 @@ timeout_func(struct xnet_context_t *ctx, int id) {
     char buffer[] = "hello world!";
 
     if (id == 1) {
-        xnet_add_timer(ctx, 1, 2000);
+        xnet_add_timer(ctx, 1, 2);
         if (g_s) {
             xnet_error(ctx, "send buffer");
-            xnet_tcp_send_buffer(ctx, g_s, buffer, sizeof(buffer));
+            xnet_tcp_send_buffer(ctx, g_s, buffer, sizeof(buffer), false);
         }
     } else if (id == 2) {
         xnet_error(ctx, "try connect server");
@@ -58,7 +58,7 @@ main(int argc, char** argv) {
     if (ret != 0) goto _END;
 
     xnet_register_timeout(ctx, timeout_func);
-    xnet_add_timer(ctx, 1, 2000);
+    xnet_add_timer(ctx, 1, 20);
 
 	xnet_dispatch_loop(ctx);
 _END:

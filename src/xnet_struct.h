@@ -59,6 +59,12 @@ typedef struct {
 } xnet_cmdreq_sendtcp_t;
 
 typedef struct {
+	int *ids;
+	char *data;
+	int size;
+} xnet_cmdreq_broadtcp_t;
+
+typedef struct {
 	xnet_context_t *source;
 	int command;
 	void *data;
@@ -77,6 +83,7 @@ typedef struct {
 		xnet_cmdreq_close_t close_req;
 		xnet_cmdreq_connect_t connect_req;
 		xnet_cmdreq_sendtcp_t send_tcp_req;
+		xnet_cmdreq_broadtcp_t broad_tcp_req;
 		xnet_cmdreq_command_t command_req;
 		xnet_cmdreq_exit_t exit_req;
 	} pkg;

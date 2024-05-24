@@ -24,9 +24,10 @@
 * 配置解析模块，server支持配置传参
 * ipv6支持
 * udp支持
+* udp测试
 
 ## todo list
-* udp测试
+
 * socket数据包多发优化，共用一个数据包
 * 绑定lua
 * 优化排版
@@ -89,3 +90,9 @@ server初始化配置、代码优化完善
 5.21
 1.完善udp数据收发
 2.修复vsnprintf bug
+
+5.23
+1.完善udp，udp测试
+
+5.24
+1.socket数据包多发优化，共用一个数据包

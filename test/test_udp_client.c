@@ -19,7 +19,7 @@ static void
 timeout_func(struct xnet_context_t *ctx, int id) {
     char str[] = "hello!";
 printf("timeout_func send buffer\n");
-    xnet_udp_send_buffer(ctx, g_s, str, sizeof(str));
+    xnet_udp_send_buffer(ctx, g_s, str, sizeof(str), false);
     xnet_add_timer(ctx, 1, 2000);
 }
 

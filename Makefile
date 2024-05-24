@@ -1,5 +1,5 @@
 BASE_SRC_C = src/xnet.c src/xnet_socket.c src/util_time.c src/xnet_timeheap.c\
-		src/util.c
+		src/util.c src/malloc_ref.c
 SERVER_SRC_C = $(BASE_SRC_C) src/xnet_main.c src/xnet_config.c
 CLIENT_SRC_C = $(BASE_SRC_C) test/test_client.c
 TEST_SRC_C = test/test.c src/xnet_timeheap.c src/xnet_config.c src/util.c

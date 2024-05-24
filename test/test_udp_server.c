@@ -12,7 +12,7 @@ recv_func(struct xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int size, 
     char str[64] = {0};
     xnet_addrtoa(addr_info, str);
 	xnet_error(ctx, "-----socket [%d] recv buffer[%s], size[%d], from[%s]", s->id, buffer, size, str);
-    xnet_udp_sendto(ctx, s, addr_info, buffer, size);
+    xnet_udp_sendto(ctx, s, addr_info, buffer, size, false);
     return 0;
 }
 

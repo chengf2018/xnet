@@ -1,4 +1,5 @@
 #include "xnet_socket.h"
+#include "malloc_ref.h"
 #include <errno.h>
 #include <assert.h>
 #include <stdio.h>
@@ -86,7 +87,7 @@ new_fd(xnet_poll_t *poll, SOCKET_TYPE fd, int id, uint8_t protocol, bool reading
 
 static void
 free_wb(xnet_write_buff_t *wb) {
-    free(wb->buffer);
+    mf_free(wb->buffer);
     free(wb);
 }
 
@@ -698,10 +699,11 @@ xnet_send_data(xnet_poll_t *poll, xnet_socket_t *s) {
         return send_udp_data(poll, s);
 }
 
+//buffer must be assigned by mf_malloc
 void
-append_send_buff(xnet_poll_t *poll, xnet_socket_t *s, char *buffer, int sz) {
+append_send_buff(xnet_poll_t *poll, xnet_socket_t *s, const char *buffer, int sz) {
     xnet_write_buff_t *wb = (xnet_write_buff_t *)malloc(sizeof(xnet_write_buff_t));
-    wb->buffer = wb->ptr = buffer;
+    wb->buffer = wb->ptr = (char*)buffer;
     wb->sz = sz;
     wb->next = NULL;
     insert_wb_list(&s->wb_list, wb);
@@ -710,10 +712,11 @@ append_send_buff(xnet_poll_t *poll, xnet_socket_t *s, char *buffer, int sz) {
     xnet_enable_write(poll, s, true);
 }
 
+//buffer must be assigned by mf_malloc
 void
-append_udp_send_buff(xnet_poll_t *poll, xnet_socket_t *s, xnet_addr_t *addr, char *buffer, int sz) {
+append_udp_send_buff(xnet_poll_t *poll, xnet_socket_t *s, xnet_addr_t *addr, const char *buffer, int sz) {
     xnet_udp_wirte_buff_t *udp_wb = (xnet_udp_wirte_buff_t *)malloc(sizeof(xnet_udp_wirte_buff_t));
-    udp_wb->wb.buffer = udp_wb->wb.ptr = buffer;
+    udp_wb->wb.buffer = udp_wb->wb.ptr = (char*)buffer;
     udp_wb->wb.sz = sz;
     udp_wb->wb.next = NULL;
     memcpy(&udp_wb->udp_addr, addr, sizeof(xnet_addr_t));

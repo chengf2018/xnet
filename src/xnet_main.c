@@ -19,13 +19,14 @@ error_func(xnet_context_t *ctx, xnet_socket_t *s, short what) {
 
 static int
 recv_func(xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int size, xnet_addr_t *addr_info) {
-    char *str = malloc(size+1);
+    char *str = xnet_send_buffer_malloc(size+1);
     memcpy(str, buffer, size);
     str[size] = '\0';
 
-	xnet_error(ctx, "-----socket [%d] recv buffer [%s], size[%d]", s->id, str, size);
-	xnet_tcp_send_buffer(ctx, s, buffer, size);
-    free(str);
+	//xnet_error(ctx, "-----socket [%d] recv buffer [%s], size[%d]", s->id, str, size);
+	xnet_tcp_send_buffer(ctx, s, str, size, true);
+    xnet_tcp_send_buffer(ctx, s, str, size, true);
+
     if (g_worker_ctx) {
         xnet_send_command(g_worker_ctx, ctx, 1, buffer, size);
         return 1;//返回非0，自行释放buffer
@@ -52,10 +53,9 @@ command_func(xnet_context_t *ctx, xnet_context_t *source, int command, void *dat
         char *str = malloc(sz+1);
         memcpy(str, (char*)data, sz);
         str[sz] = '\0';
-        xnet_error(ctx, "socket [%s], command", str);
+        //xnet_error(ctx, "socket [%s], command", str);
         free(str);
     }
-    xnet_error(ctx, "deal command[%d], size:[%d]", command, sz);
     return 0;//返回0，由xnet释放data
 }
 
@@ -100,7 +100,7 @@ main(int argc, char** argv) {
     xnet_context_t *ctx;
     pthread_t pid;
     xnet_init_config_t init_config;
-    const char *config_name = "./test.config";
+    const char *config_name = NULL;
     if (argc == 2) config_name = argv[1];
 printf("config name:[%s]\n", config_name);
 
