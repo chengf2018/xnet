@@ -27,7 +27,7 @@ static int
 log_command_func(xnet_context_t *ctx, xnet_context_t *source, int command, void *data, int sz) {
     char time_str[128];
     timestring(ctx->nowtime/1000, time_str, sizeof(time_str));
-    fprintf(g_log_context.stdlog, "[%d][%s.%03d]:", command, time_str, ctx->nowtime%1000);
+    fprintf(g_log_context.stdlog, "[%d][%s.%03ld]:", command, time_str, ctx->nowtime%1000);
     fwrite(data, sz, 1, g_log_context.stdlog);
     fprintf(g_log_context.stdlog, "\n");
     fflush(g_log_context.stdlog);

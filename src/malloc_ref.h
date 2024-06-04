@@ -1,6 +1,7 @@
 #ifndef _MALLOC_REF_C_
 #define _MALLOC_REF_C_
 #include <stdint.h>
+#include <stddef.h>
 
 #define REF_INT uint16_t
 
