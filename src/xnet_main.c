@@ -130,9 +130,9 @@ xnet_error(ctx, "------start loop------");
 	xnet_dispatch_loop(ctx);
 xnet_error(ctx, "------exit loop------");
 _END:
-    xnet_release_context(ctx);
+    xnet_destroy_context(ctx);
 
-    if (g_worker_ctx) xnet_release_context(g_worker_ctx);
+    if (g_worker_ctx) xnet_destroy_context(g_worker_ctx);
     xnet_deinit();
     release_init_config(&init_config);
     return 0;

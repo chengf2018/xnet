@@ -83,10 +83,13 @@ typedef struct {
     bool reading;
     bool writing;
     bool closing;
-    //发送缓冲区
+
     xnet_wb_list_t wb_list;
     int64_t wb_size;
     xnet_addr_t addr_info;
+
+    void *unpacker;
+    void *user_ptr;//保留给用户
 } xnet_socket_t;
 
 typedef struct {

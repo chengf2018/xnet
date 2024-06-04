@@ -25,10 +25,10 @@
 * ipv6支持
 * udp支持
 * udp测试
+* socket数据包多发优化，共用一个数据包
 
 ## todo list
-
-* socket数据包多发优化，共用一个数据包
+* pack/unpack机制
 * 绑定lua
 * 优化排版
 

@@ -39,7 +39,7 @@ thread_log(void *p) {
     xnet_context_t *ctx = p;
 
     xnet_dispatch_loop(ctx);
-    xnet_release_context(ctx);
+    xnet_destroy_context(ctx);
     if (g_log_context.filename)
         free(g_log_context.filename);
     if (g_log_context.stdlog != stdout)
@@ -297,7 +297,7 @@ FAILED:
 }
 
 void
-xnet_release_context(xnet_context_t *ctx) {
+xnet_destroy_context(xnet_context_t *ctx) {
     xnet_poll_deinit(&ctx->poll);
     xnet_timeheap_release(&ctx->th);
     free(ctx);

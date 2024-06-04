@@ -34,7 +34,7 @@ main(int argc, char** argv) {
 xnet_error(ctx, "start server loop");
 	xnet_dispatch_loop(ctx);
 _END:
-    xnet_release_context(ctx);
+    xnet_destroy_context(ctx);
     xnet_deinit();
     return 0;
 }
