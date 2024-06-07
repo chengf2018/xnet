@@ -17,6 +17,8 @@ struct xnet_unpacker {
 	clear_method_t cm;
 	uint32_t limit;//包大小限制,为0表示没有限制
 	bool full;//收完一个整包，需设置此标记为true，在进行回调后，会调用cm方法清理用户缓存
+	bool close;//用于在成功进行一次回调后终止剩余数据的解包
+	void *user_ptr;//保留给用户
 	char arg[0];
 };
 
@@ -25,21 +27,43 @@ void xnet_unpacker_free(xnet_unpacker_t * up);
 int xnet_unpacker_recv(xnet_unpacker_t *up, char *buffer, uint32_t sz);
 
 
-
+enum http_state_e {
+	HTTP_STATE_METHOD = 0,
+	HTTP_STATE_URL,
+	HTTP_STATE_VERSION,
+	HTTP_STATE_HEADER_KEY,
+	HTTP_STATE_HEADER_VALUE,
+	HTTP_STATE_HEADER_DONE,
+	HTTP_STATE_BODY,
+	HTTP_STATE_DONE
+};
 typedef struct {
-	xnet_string_t header_key;
-	xnet_string_t header_value;
+	xnet_string_t key;
+	xnet_string_t value;
 } xnet_httpheader_t;
 
 typedef struct {
-	uint16_t state;//method->url->version
-	uint8_t method;
-	uint8_t version;
+	uint16_t state;
+	uint16_t subState;
+	xnet_string_t method;
 	xnet_string_t url;
+	xnet_string_t version;
 	xnet_httpheader_t *header;
 	uint16_t header_count;
+	uint16_t header_capacity;
 	xnet_string_t *body;
+	uint32_t content_length;
+	uint32_t recv_len;
+	int code;
 } xnet_httprequest_t;
+
+typedef struct {
+	int code;
+	xnet_httpheader_t *header;
+	uint16_t header_count;
+	uint16_t header_capacity;
+	xnet_string_t *body;
+} xnet_httpresponse_t;
 
 /**
  * unpack method
@@ -48,7 +72,10 @@ typedef struct {
  * 0:error
  */
 uint32_t xnet_unpack_http(xnet_unpacker_t *up, char *buffer, uint32_t sz);
+
 void xnet_clear_http(void *arg);
+xnet_httpheader_t *xnet_get_http_header_value(xnet_httprequest_t *req, const char *key);
+
 
 #define BUFFER_HEADER_SIZE sizeof(uint32_t)
 typedef struct {

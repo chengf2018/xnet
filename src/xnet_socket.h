@@ -88,8 +88,9 @@ typedef struct {
     int64_t wb_size;
     xnet_addr_t addr_info;
 
+    //保留给用户
     void *unpacker;
-    void *user_ptr;//保留给用户
+    void *user_ptr;
 } xnet_socket_t;
 
 typedef struct {

@@ -414,6 +414,7 @@ xnet_tcp_send_buffer(xnet_context_t *ctx, xnet_socket_t *s, const char *buffer, 
 
 void
 xnet_close_socket(xnet_context_t *ctx, xnet_socket_t *s) {
+    ctx->error_func(ctx, s, 0);
     //主动关闭连接
     if (wb_list_empty(s)) {
         xnet_poll_closefd(&ctx->poll, s);

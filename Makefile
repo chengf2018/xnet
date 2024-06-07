@@ -12,7 +12,7 @@ alltest : test test_unpacker
 test : $(TEST_SRC_C)
 	gcc -o $@ $^ -std=gnu99
 
-test_packer : test/test_packer.c src/xnet_packer.c
+test_packer : test/test_packer.c src/xnet_packer.c src/xnet_string.c
 	gcc -o $@ $^ -std=gnu99
 
 win : xnet_main.exe client.exe test_udp_client.exe test_udp_server.exe 

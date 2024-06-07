@@ -598,7 +598,7 @@ xnet_recv_udp_data(xnet_poll_t *poll, xnet_socket_t *s, xnet_addr_t *addr_out) {
     n = recvfrom(s->fd, poll->udp_buffer, MAX_UDP_PACKAGE, 0, &sa.s, &slen);
     if (n < 0) {
         err = get_last_error();
-printf("-------recvfrom error:[%d]\n", err);
+        printf("recvfrom error:[%d]\n", err);
         return -1;
     }
 
@@ -665,7 +665,7 @@ send_udp_data(xnet_poll_t *poll, xnet_socket_t *s) {
         udp_wb = (xnet_udp_wirte_buff_t*)wb_list->head;
         sasz = xnet_addr_to_sockaddr(&udp_wb->udp_addr, &sa);
         n = sendto(s->fd, udp_wb->wb.ptr, udp_wb->wb.sz, 0, &sa.s, sasz);
-printf("send_udp_data n:[%d]\n", n);
+
         if (n < 0) {
             err = get_last_error();
             if (err == XNET_EINTR || XNET_HAVR_WOULDBLOCK(err)) return -1;

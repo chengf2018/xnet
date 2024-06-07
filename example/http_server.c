@@ -1,5 +1,5 @@
 #include "../src/xnet.h"
-#include "unpacker.h"
+#include "../src/xnet_packer.h"
 
 static xnet_socket_t *g_s;
 
@@ -10,12 +10,18 @@ error_func(struct xnet_context_t *ctx, xnet_socket_t *s, short what) {
 
 static int
 recv_func(struct xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int size, xnet_addr_t *addr_info) {
-	
+	if (s->unpacker) {
+		if (xnet_unpacker_recv(up, buffer, size) != 0) {
+			printf("unpacker recv error!\n");
+		}
+	}
     return 0;
 }
 
 static void
-http_request(unpack_buffer_t *ub, void *arg) {
+http_request(xnet_unpacker_t *up, void *arg) {
+	xnet_httprequest_t *req = (xnet_httprequest_t *)arg;
+	xnet_socket_t *s = (xnet_socket_t *)up->user_ptr;
 
 }
 
@@ -26,7 +32,12 @@ listen_func(xnet_context_t *ctx, xnet_socket_t *s, xnet_socket_t *ns, xnet_addr_
     xnet_addrtoa(addr_info, str);
 	xnet_error(ctx, "-----socket [%d] accept new, new socket:[%d], [%s]", s->id, ns->id, str);
 
-	up = xnet_unpacker_new(sizeof(xx), http_request, xnet_unpack_http, 10240);
+	up = xnet_unpacker_new(sizeof(xnet_httprequest_t), http_request, xnet_unpack_http, xnet_clear_http, 1024);
+	if (up == NULL) {
+		printf("new unpacker error\n");
+		return;
+	}
+	up->user_ptr = s;
 	xnet_set_unpacker(s, up);
 }
 
