@@ -24,8 +24,8 @@ recv_func(xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int size, xnet_ad
     str[size] = '\0';
 
 	//xnet_error(ctx, "-----socket [%d] recv buffer [%s], size[%d]", s->id, str, size);
-	xnet_tcp_send_buffer(ctx, s, str, size, true);
-    xnet_tcp_send_buffer(ctx, s, str, size, true);
+	xnet_tcp_send_buffer_ref(ctx, s, str, size, true);
+    xnet_tcp_send_buffer_ref(ctx, s, str, size, true);
 
     if (g_worker_ctx) {
         xnet_send_command(g_worker_ctx, ctx, 1, buffer, size);

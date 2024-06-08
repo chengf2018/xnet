@@ -62,6 +62,7 @@ typedef struct write_buffer {
     char *buffer;
     char *ptr;
     int sz;
+    bool raw;
 } xnet_write_buff_t;
 
 typedef struct {
@@ -163,12 +164,12 @@ int xnet_udp_connect(xnet_poll_t *poll, xnet_socket_t * s, const char *host, int
 
 void xnet_addrtoa(xnet_addr_t *addr, char str[64]);
 
-//以下接口不希望对外提供
+//一般情况下，以下接口不对外提供
 bool wb_list_empty(xnet_socket_t *s);
 void set_nonblocking(SOCKET_TYPE fd);
 void set_keepalive(SOCKET_TYPE fd);
-void append_send_buff(xnet_poll_t *poll, xnet_socket_t *s, const char *buffer, int sz);
-void append_udp_send_buff(xnet_poll_t *poll, xnet_socket_t *s, xnet_addr_t *addr, const char *buffer, int sz);
+void append_send_buff(xnet_poll_t *poll, xnet_socket_t *s, const char *buffer, int sz, bool raw);
+void append_udp_send_buff(xnet_poll_t *poll, xnet_socket_t *s, xnet_addr_t *addr, const char *buffer, int sz, bool raw);
 void block_recv(SOCKET_TYPE fd, void *buffer, int sz);
 void block_send(SOCKET_TYPE fd, void *buffer, int sz);
 int get_sockopt(SOCKET_TYPE fd, int level, int optname, int *optval, int *optlen);

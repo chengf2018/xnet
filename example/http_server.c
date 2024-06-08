@@ -28,8 +28,8 @@ printf("pack http response\n");
 	xnet_pack_http(rsp, &out_str);
 printf("send http response, sz:[%d]\n", xnet_string_get_size(&out_str));
 printf("[%s]\n", xnet_string_get_c_str(&out_str));
-	xnet_tcp_send_buffer(ctx, s, xnet_string_get_str(&out_str), xnet_string_get_size(&out_str), false);
-	xnet_string_clear(&out_str);
+	xnet_tcp_send_buffer(ctx, s, xnet_string_get_str(&out_str), xnet_string_get_size(&out_str), true);
+	//xnet_string_clear(&out_str);
 	xnet_close_socket(ctx, s);
 }
 

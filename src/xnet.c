@@ -158,17 +158,12 @@ cmd_connect(xnet_context_t *ctx, xnet_cmdreq_connect_t *req) {
 
 static void
 cmd_send_tcp_pkg(xnet_context_t *ctx, xnet_cmdreq_sendtcp_t *req) {
-    char *new_buffer;
     xnet_socket_t *s = &ctx->poll.slots[req->id];
     if (s->type == SOCKET_TYPE_INVALID || s->closing) {
         free(req->data);
         return;
     }
-    new_buffer = mf_malloc(req->size);
-    mf_add_ref(new_buffer);
-    memcpy(new_buffer, req->data, req->size);
-    free(req->data);
-    append_send_buff(&ctx->poll, s, new_buffer, req->size);
+    append_send_buff(&ctx->poll, s, req->data, req->size, true);
 }
 
 static void
@@ -184,7 +179,7 @@ cmd_broad_tcp_pkg(xnet_context_t *ctx, xnet_cmdreq_broadtcp_t *req) {
         if (s->type == SOCKET_TYPE_INVALID || s->closing) continue;
 
         mf_add_ref(new_buffer);
-        append_send_buff(&ctx->poll, s, new_buffer, req->size);
+        append_send_buff(&ctx->poll, s, new_buffer, req->size, false);
     }
     free(req->ids);
     free(req->data);
@@ -398,7 +393,7 @@ xnet_send_buffer_free(char *ptr) {
 }
 
 void
-xnet_tcp_send_buffer(xnet_context_t *ctx, xnet_socket_t *s, const char *buffer, int sz, bool raw) {
+xnet_tcp_send_buffer_ref(xnet_context_t *ctx, xnet_socket_t *s, const char *buffer, int sz, bool raw) {
     char *send_buffer;
     if (sz <= 0 || s->type == SOCKET_TYPE_INVALID || s->closing)
         return;
@@ -409,7 +404,21 @@ xnet_tcp_send_buffer(xnet_context_t *ctx, xnet_socket_t *s, const char *buffer, 
         memcpy(send_buffer, buffer, sz);
     }
     mf_add_ref(send_buffer);
-    append_send_buff(&ctx->poll, s, send_buffer, sz);
+    append_send_buff(&ctx->poll, s, send_buffer, sz, false);
+}
+
+void
+xnet_tcp_send_buffer(xnet_context_t *ctx, xnet_socket_t *s, const char *buffer, int sz, bool raw) {
+    char *send_buffer;
+    if (sz <= 0 || s->type == SOCKET_TYPE_INVALID || s->closing)
+        return;
+    if (raw) {
+        send_buffer = (char*)buffer;
+    } else {
+        send_buffer = (char*)malloc(sz);
+        memcpy(send_buffer, buffer, sz);
+    }
+    append_send_buff(&ctx->poll, s, send_buffer, sz, true);
 }
 
 void
@@ -449,13 +458,32 @@ xnet_udp_sendto(xnet_context_t *ctx, xnet_socket_t *s, xnet_addr_t *recv_addr, c
         send_buffer = (char*)malloc(sz);
         memcpy(send_buffer, buffer, sz);
     }
+    append_udp_send_buff(&ctx->poll, s, recv_addr, send_buffer, sz, true);
+}
+
+void
+xnet_udp_sendto_ref(xnet_context_t *ctx, xnet_socket_t *s, xnet_addr_t *recv_addr, const char *buffer, int sz, bool raw) {
+    char *send_buffer;
+    if (s->type == SOCKET_TYPE_INVALID || s->closing)
+        return;
+    if (raw) {
+        send_buffer = (char*)buffer;
+    } else {
+        send_buffer = (char*)mf_malloc(sz);
+        memcpy(send_buffer, buffer, sz);
+    }
     mf_add_ref(send_buffer);
-    append_udp_send_buff(&ctx->poll, s, recv_addr, send_buffer, sz);
+    append_udp_send_buff(&ctx->poll, s, recv_addr, send_buffer, sz, false);
 }
 
 void
 xnet_udp_send_buffer(xnet_context_t *ctx, xnet_socket_t *s, const char *buffer, int sz, bool raw) {
     xnet_udp_sendto(ctx, s, &s->addr_info, buffer, sz, raw);
+}
+
+void
+xnet_udp_send_buffer_ref(xnet_context_t *ctx, xnet_socket_t *s, const char *buffer, int sz, bool raw) {
+    xnet_udp_sendto_ref(ctx, s, &s->addr_info, buffer, sz, raw);
 }
 
 void

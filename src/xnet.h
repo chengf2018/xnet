@@ -35,17 +35,22 @@ void xnet_send_buffer_free(char *ptr);
 /*---------Main Thread Method Begin---------*/
 int xnet_tcp_connect(xnet_context_t *ctx, const char *host, int port, xnet_socket_t **socket_out);//异步，通过connected事件回调
 int xnet_tcp_listen(xnet_context_t *ctx, const char *host, int port, int backlog, xnet_socket_t **socket_out);
-//raw buffer must be asigned by xnet_send_buffer_malloc
 void xnet_tcp_send_buffer(xnet_context_t *ctx, xnet_socket_t *s, const char *buffer, int sz, bool raw);
 
+//'buffer' must be asigned by xnet_send_buffer_malloc
+void xnet_tcp_send_buffer_ref(xnet_context_t *ctx, xnet_socket_t *s, const char *buffer, int sz, bool raw);
 
 int xnet_udp_listen(xnet_context_t *ctx, const char *host, int port, xnet_socket_t **socket_out);
-//raw buffer must be asigned by xnet_send_buffer_malloc
+
 void xnet_udp_sendto(xnet_context_t *ctx, xnet_socket_t *s, xnet_addr_t *recv_addr, const char *buffer, int sz, bool raw);
+//'buffer' must be asigned by xnet_send_buffer_malloc
+void xnet_udp_sendto_ref(xnet_context_t *ctx, xnet_socket_t *s, xnet_addr_t *recv_addr, const char *buffer, int sz, bool raw);
 int xnet_udp_create(xnet_context_t *ctx, int protocol, xnet_socket_t **socket_out);
 int xnet_udp_set_addr(xnet_context_t *ctx, xnet_socket_t *s, const char *host, int port);
-//raw buffer must be asigned by xnet_send_buffer_malloc
+
 void xnet_udp_send_buffer(xnet_context_t *ctx, xnet_socket_t *s, const char *buffer, int sz, bool raw);
+//'buffer' must be asigned by xnet_send_buffer_malloc
+void xnet_udp_send_buffer_ref(xnet_context_t *ctx, xnet_socket_t *s, const char *buffer, int sz, bool raw);
 
 void xnet_close_socket(xnet_context_t *ctx, xnet_socket_t *s);
 int xnet_add_timer(xnet_context_t *ctx, int id, int timeout);
