@@ -400,7 +400,7 @@ xnet_send_buffer_free(char *ptr) {
 void
 xnet_tcp_send_buffer(xnet_context_t *ctx, xnet_socket_t *s, const char *buffer, int sz, bool raw) {
     char *send_buffer;
-    if (s->type == SOCKET_TYPE_INVALID || s->closing)
+    if (sz <= 0 || s->type == SOCKET_TYPE_INVALID || s->closing)
         return;
     if (raw) {
         send_buffer = (char*)buffer;

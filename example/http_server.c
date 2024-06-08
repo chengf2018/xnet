@@ -11,7 +11,8 @@ error_func(struct xnet_context_t *ctx, xnet_socket_t *s, short what) {
 static int
 recv_func(struct xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int size, xnet_addr_t *addr_info) {
 	if (s->unpacker) {
-		if (xnet_unpacker_recv(up, buffer, size) != 0) {
+		printf("---recv http socket data---\n");
+		if (xnet_unpacker_recv(s->unpacker, buffer, size) != 0) {
 			printf("unpacker recv error!\n");
 		}
 	}
@@ -21,12 +22,15 @@ recv_func(struct xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int size, 
 static void
 response(xnet_context_t *ctx, xnet_socket_t *s, xnet_httpresponse_t *rsp) {
 	xnet_string_t out_str;
-	int sz;
+
 	xnet_string_init(&out_str);
-	sz = xnet_pack_http(rsp, &out_str);
-	if (sz > 0)
-		xnet_tcp_send_buffer(ctx, s, xnet_string_get_str(&out_str), xnet_string_get_size(&out_str));
+printf("pack http response\n");
+	xnet_pack_http(rsp, &out_str);
+printf("send http response, sz:[%d]\n", xnet_string_get_size(&out_str));
+printf("[%s]\n", xnet_string_get_c_str(&out_str));
+	xnet_tcp_send_buffer(ctx, s, xnet_string_get_str(&out_str), xnet_string_get_size(&out_str), false);
 	xnet_string_clear(&out_str);
+	xnet_close_socket(ctx, s);
 }
 
 static void
@@ -35,8 +39,13 @@ http_request(xnet_unpacker_t *up, void *arg) {
 	xnet_context_t *ctx = (xnet_context_t *)up->user_ptr;
 	xnet_socket_t *s = (xnet_socket_t *)up->user_arg;
 	xnet_httpresponse_t rsp = {};
-	rsp.code = req.code;
-	response(ctx, s, &rsp)
+	xnet_set_http_rsp_code(&rsp, req->code);
+	xnet_add_http_rsp_header(&rsp, "Content-Type", "text/html");
+	//xnet_add_http_rsp_header(&rsp, "Transfer-Encoding", "chunked");
+	xnet_set_http_rsp_body(&rsp, "<p>hello world!</p>");
+
+	printf("respone http, state:[%d]:\n", req->code);
+	response(ctx, s, &rsp);
 }
 
 static void
@@ -53,7 +62,7 @@ listen_func(xnet_context_t *ctx, xnet_socket_t *s, xnet_socket_t *ns, xnet_addr_
 	}
 	up->user_ptr = ctx;
 	up->user_arg = ns;
-	xnet_set_unpacker(ns, up);
+	ns->unpacker = up;
 }
 
 int

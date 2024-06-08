@@ -6,7 +6,7 @@
 #include <string.h>
 
 #include "xnet_struct.h"
-
+#include "xnet_packer.h"
 
 
 int xnet_init(xnet_init_config_t *config);
@@ -33,8 +33,6 @@ char *xnet_send_buffer_malloc(size_t size);
 void xnet_send_buffer_free(char *ptr);
 
 /*---------Main Thread Method Begin---------*/
-//void xnet_set_unpacker(xnet_socket_t *s, xnet_unpacker *up);
-
 int xnet_tcp_connect(xnet_context_t *ctx, const char *host, int port, xnet_socket_t **socket_out);//异步，通过connected事件回调
 int xnet_tcp_listen(xnet_context_t *ctx, const char *host, int port, int backlog, xnet_socket_t **socket_out);
 //raw buffer must be asigned by xnet_send_buffer_malloc
