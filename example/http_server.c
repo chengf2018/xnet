@@ -39,6 +39,15 @@ http_request(xnet_unpacker_t *up, void *arg) {
 	xnet_context_t *ctx = (xnet_context_t *)up->user_ptr;
 	xnet_socket_t *s = (xnet_socket_t *)up->user_arg;
 	xnet_httpresponse_t rsp = {};
+	int i;
+
+	printf("method:[%s], url:[%s], version:[%s]\n", xnet_string_get_c_str(&req->method),
+		xnet_string_get_c_str(&req->url), xnet_string_get_c_str(&req->version));
+	for (i=0; i<req->header_count; i++) {
+		printf("-header-[%s]: [%s]\n", xnet_string_get_c_str(&req->header[i].key), 
+			xnet_string_get_c_str(&req->header[i].value));
+	}
+
 	xnet_set_http_rsp_code(&rsp, req->code);
 	xnet_add_http_rsp_header(&rsp, "Content-Type", "text/html");
 	//xnet_add_http_rsp_header(&rsp, "Transfer-Encoding", "chunked");
