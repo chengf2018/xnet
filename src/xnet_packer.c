@@ -359,6 +359,14 @@ xnet_get_http_header_value(xnet_httprequest_t *req, const char *key) {
 	return NULL;
 }
 
+int
+xnet_pack_http(xnet_httpresponse_t *rsp, char **buffer) {
+	char pack_str[64];
+	sprintf("HTTP/1.1 %d OK\r\n", rsp->code);
+}
+
+
+
 static uint32_t
 read_size(char header[BUFFER_HEADER_SIZE]) {
 	uint32_t sz = 0;

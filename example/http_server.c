@@ -19,10 +19,22 @@ recv_func(struct xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int size, 
 }
 
 static void
+response(xnet_context_t *ctx, xnet_socket_t *s, xnet_httpresponse_t *rsp) {
+	char *buffer;
+	int sz;
+	sz = xnet_pack_http(rsp, &buffer);
+	if (sz > 0)
+		xnet_tcp_send_buffer(ctx, s, buffer, sz);
+}
+
+static void
 http_request(xnet_unpacker_t *up, void *arg) {
 	xnet_httprequest_t *req = (xnet_httprequest_t *)arg;
-	xnet_socket_t *s = (xnet_socket_t *)up->user_ptr;
-
+	xnet_context_t *ctx = (xnet_context_t *)up->user_ptr;
+	xnet_socket_t *s = (xnet_socket_t *)up->user_arg;
+	xnet_httpresponse_t rsp = {};
+	rsp.code = req.code;
+	response(ctx, s, &rsp)
 }
 
 static void
@@ -37,8 +49,9 @@ listen_func(xnet_context_t *ctx, xnet_socket_t *s, xnet_socket_t *ns, xnet_addr_
 		printf("new unpacker error\n");
 		return;
 	}
-	up->user_ptr = s;
-	xnet_set_unpacker(s, up);
+	up->user_ptr = ctx;
+	up->user_arg = ns;
+	xnet_set_unpacker(ns, up);
 }
 
 int
