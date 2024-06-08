@@ -137,10 +137,36 @@ printf("--start test http unpacker--\n");
 printf("--finshed http unpacker test--\n");
 }
 
+static const char *http_pack_expect = \
+"HTTP/1.1 200 OK\r\n"
+"Content-Type: text/html\r\n"
+"Transfer-Encoding: chunked\r\n"
+"\r\n"
+"<p>hello world!</p>"
+;
+
+void
+test_http_packer() {
+	xnet_string_t buffer;
+	xnet_httpresponse_t rsp = {};
+printf("--start http packer test--\n");
+	xnet_set_http_rsp_code(&rsp, 200);
+	xnet_add_http_rsp_header(&rsp, "Content-Type", "text/html");
+	xnet_add_http_rsp_header(&rsp, "Transfer-Encoding", "chunked");
+	xnet_set_http_rsp_body(&rsp, "<p>hello world!</p>");
+	xnet_string_init(&buffer);
+	xnet_pack_http(&rsp, &buffer);
+	printf("pack string : [[[%s]]]\n", xnet_string_get_c_str(&buffer));
+	assert(xnet_string_compare_cs(&buffer, http_pack_expect) == 0);
+	xnet_clear_http_rsp(&rsp);
+	xnet_string_clear(&buffer);
+printf("--finshed http packer test--\n");
+}
+
 int
 main(int argc, char **argv) {
 	test_sizebuffer_unpacker();
-
 	test_http_unpacker();
+	test_http_packer();
 	return 0;
 }

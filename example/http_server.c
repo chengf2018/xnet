@@ -20,11 +20,13 @@ recv_func(struct xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int size, 
 
 static void
 response(xnet_context_t *ctx, xnet_socket_t *s, xnet_httpresponse_t *rsp) {
-	char *buffer;
+	xnet_string_t out_str;
 	int sz;
-	sz = xnet_pack_http(rsp, &buffer);
+	xnet_string_init(&out_str);
+	sz = xnet_pack_http(rsp, &out_str);
 	if (sz > 0)
-		xnet_tcp_send_buffer(ctx, s, buffer, sz);
+		xnet_tcp_send_buffer(ctx, s, xnet_string_get_str(&out_str), xnet_string_get_size(&out_str));
+	xnet_string_clear(&out_str);
 }
 
 static void

@@ -258,7 +258,7 @@ parse_request(xnet_httprequest_t *req, char *buffer, uint32_t sz, uint32_t body_
 			case HTTP_STATE_HEADER_DONE:
 				q++;// '\n'
 				//recv header done.
-				length_header = xnet_get_http_header_value(req, "Content-Length");
+				length_header = xnet_get_http_header_value(req, "content-length");
 				if (length_header) {
 					req->content_length = (uint32_t)xnet_string_toint(&length_header->value);
 					if (body_limit != 0 && req->content_length > 0 &&
@@ -347,24 +347,180 @@ xnet_clear_http(void *arg) {
 }
 
 xnet_httpheader_t *
-xnet_get_http_header_value(xnet_httprequest_t *req, const char *key) {
+xnet_get_http_header_value(void *req_or_rsp, const char *key) {
+	xnet_httprequest_t *req = (xnet_httprequest_t *)req_or_rsp;
 	xnet_httpheader_t *header = req->header;
 	int i;
 	if (!header || req->header_count == 0) return NULL;
 	for (i=0; i<req->header_count; i++) {
-		if (xnet_string_compare_cs(&header[i].key, key) == 0) {
+		if (xnet_string_casecompare_cs(&header[i].key, key) == 0) {
 			return &header[i];
 		}
 	}
 	return NULL;
 }
 
+static const char *
+get_http_status_msg(int state) {
+	switch (state) {
+		case 100:
+			return "Continue";
+		case 101:
+			return "Switching Protocols";
+		case 200:
+			return "OK";
+		case 201:
+			return "Created";
+		case 202:
+			return "Accepted";
+		case 203:
+			return "Non-Authoritative Information";
+		case 204:
+			return "No Content";
+		case 205:
+			return "Reset Content";
+		case 206:
+			return "Partial Content";
+		case 300:
+			return "Multiple Choices";
+		case 301:
+			return "Moved Permanently";
+		case 302:
+			return "Found";
+		case 303:
+			return "See Other";
+		case 304:
+			return "Not Modified";
+		case 305:
+			return "Use Proxy";
+		case 307:
+			return "Temporary Redirect";
+		case 400:
+			return "Bad Request";
+		case 401:
+			return "Unauthorized";
+		case 402:
+			return "Payment Required";
+		case 403:
+			return "Forbidden";
+		case 404:
+			return "Not Found";
+		case 405:
+			return "Method Not Allowed";
+		case 406:
+			return "Not Acceptable";
+		case 407:
+			return "Proxy Authentication Required";
+		case 408:
+			return "Request Time-out";
+		case 409:
+			return "Conflict";
+		case 410:
+			return "Gone";
+		case 411:
+			return "Length Required";
+		case 412:
+			return "Precondition Failed";
+		case 413:
+			return "Request Entity Too Large";
+		case 414:
+			return "Request-URI Too Large";
+		case 415:
+			return "Unsupported Media Type";
+		case 416:
+			return "Requested range not satisfiable";
+		case 417:
+			return "Expectation Failed";
+		case 500:
+			return "Internal Server Error";
+		case 501:
+			return "Not Implemented";
+		case 502:
+			return "Bad Gateway";
+		case 503:
+			return "Service Unavailable";
+		case 504:
+			return "Gateway Time-out";
+		case 505:
+			return "HTTP Version not supported";
+	};
+	return "";
+};
+
 int
-xnet_pack_http(xnet_httpresponse_t *rsp, char **buffer) {
-	char pack_str[64];
-	sprintf("HTTP/1.1 %d OK\r\n", rsp->code);
+xnet_pack_http(xnet_httpresponse_t *rsp, xnet_string_t *out) {
+	int i;
+	char pack_str[128] = {};
+	sprintf(pack_str, "HTTP/1.1 %d %s\r\n", rsp->code, get_http_status_msg(rsp->code));
+	xnet_string_append_cs(out, pack_str);
+
+	if (rsp->header) {
+		for (i=0; i<rsp->header_count; i++) {
+			xnet_string_append(out, &rsp->header[i].key);
+			xnet_string_append_cs(out, ": ");
+			xnet_string_append(out, &rsp->header[i].value);
+			xnet_string_append_cs(out, "\r\n");
+		}
+	}
+	if (rsp->body && xnet_string_get_size(rsp->body) > 0) {
+		//if 'transfer-encoding' is set, don't need append 'content-length'
+		if (xnet_get_http_header_value(rsp, "transfer-encoding")) {
+			xnet_string_append_cs(out, "\r\n");
+		} else {
+			sprintf(pack_str, "content-length: %d\r\n\r\n", xnet_string_get_size(rsp->body));
+			xnet_string_append_cs(out, pack_str);
+		}
+		xnet_string_append(out, rsp->body);
+	} else {
+		xnet_string_append_cs(out, "\r\n");
+	}
+	return 0;
 }
 
+inline void
+xnet_set_http_rsp_code(xnet_httpresponse_t *rsp, int code) {
+	rsp->code = code;
+}
+
+void
+xnet_add_http_rsp_header(xnet_httpresponse_t *rsp, const char *key, const char *value) {
+	uint32_t new_capacity;
+	if (rsp->header_capacity >= rsp->header_count) {
+		new_capacity = rsp->header_capacity ? rsp->header_capacity*2 : 32;
+		rsp->header = realloc(rsp->header, sizeof(*rsp->header)*new_capacity);
+		assert(rsp->header);
+		memset(rsp->header + rsp->header_capacity, 0,
+			sizeof(*rsp->header)*(new_capacity - rsp->header_capacity));
+		rsp->header_capacity = new_capacity;
+	}
+	xnet_string_set_cs(&rsp->header[rsp->header_count].key, key);
+	xnet_string_set_cs(&rsp->header[rsp->header_count].value, value);
+	rsp->header_count ++;
+}
+
+void
+xnet_set_http_rsp_body(xnet_httpresponse_t *rsp, const char *body) {
+	if (!rsp->body) {
+		rsp->body = xnet_string_create();
+	}
+	xnet_string_set_cs(rsp->body, body);
+}
+
+void
+xnet_clear_http_rsp(xnet_httpresponse_t *rsp) {
+	int i;
+	if (rsp->header) {
+		for (i=0; i<rsp->header_count; i++) {
+			xnet_string_clear(&rsp->header[i].key);
+			xnet_string_clear(&rsp->header[i].value);
+		}
+		free(rsp->header);
+	}
+	if (rsp->body) {
+		xnet_string_destroy(rsp->body);
+	}
+	memset(rsp, 0, sizeof(*rsp));
+}
 
 
 static uint32_t

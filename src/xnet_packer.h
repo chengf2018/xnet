@@ -15,7 +15,7 @@ struct xnet_unpacker {
 	unpack_callback_t cb;
 	unpack_method_t um;
 	clear_method_t cm;
-	uint32_t limit;//包大小限制,为0表示没有限制
+	uint32_t limit;//包大小限制,为0表示没有限制,实际限制范围取决于解包方法
 	bool full;//收完一个整包，需设置此标记为true，在进行回调后，会调用cm方法清理用户缓存
 	bool close;//用于在成功进行一次回调后终止剩余数据的解包
 	//保留给用户
@@ -44,15 +44,18 @@ typedef struct {
 	xnet_string_t value;
 } xnet_httpheader_t;
 
+#define HTTP_CMMOND_HEAD \
+xnet_httpheader_t *header; \
+uint16_t header_count; \
+uint16_t header_capacity;
+
 typedef struct {
+	HTTP_CMMOND_HEAD
 	uint16_t state;
 	uint16_t subState;
 	xnet_string_t method;
 	xnet_string_t url;
 	xnet_string_t version;
-	xnet_httpheader_t *header;
-	uint16_t header_count;
-	uint16_t header_capacity;
 	xnet_string_t *body;
 	uint32_t content_length;
 	uint32_t recv_len;
@@ -60,10 +63,8 @@ typedef struct {
 } xnet_httprequest_t;
 
 typedef struct {
+	HTTP_CMMOND_HEAD
 	int code;
-	xnet_httpheader_t *header;
-	uint16_t header_count;
-	uint16_t header_capacity;
 	xnet_string_t *body;
 } xnet_httpresponse_t;
 
@@ -75,8 +76,12 @@ typedef struct {
  */
 uint32_t xnet_unpack_http(xnet_unpacker_t *up, char *buffer, uint32_t sz);
 void xnet_clear_http(void *arg);
-xnet_httpheader_t *xnet_get_http_header_value(xnet_httprequest_t *req, const char *key);
-int xnet_pack_http(xnet_httpresponse_t *rsp, char **buffer);
+xnet_httpheader_t *xnet_get_http_header_value(void *req_or_rsp, const char *key);
+int xnet_pack_http(xnet_httpresponse_t *rsp, xnet_string_t *out);
+void xnet_set_http_rsp_code(xnet_httpresponse_t *rsp, int code);
+void xnet_add_http_rsp_header(xnet_httpresponse_t *rsp, const char *key, const char *value);
+void xnet_set_http_rsp_body(xnet_httpresponse_t *rsp, const char *body);
+void xnet_clear_http_rsp(xnet_httpresponse_t *rsp);
 
 #define BUFFER_HEADER_SIZE sizeof(uint32_t)
 typedef struct {

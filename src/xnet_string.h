@@ -19,13 +19,16 @@ void xnet_string_clear(xnet_string_t *s);
 xnet_string_t *xnet_string_create();
 xnet_string_t *xnet_string_create_link();
 void xnet_string_destroy(xnet_string_t *s);
-void xnet_string_set(xnet_string_t *s, char *cs, uint32_t cs_size);
+void xnet_string_set(xnet_string_t *s, const char *cs, uint32_t cs_size);
+void xnet_string_set_cs(xnet_string_t *s, const char *cs);
 char *xnet_string_get_str(xnet_string_t *s);
 char *xnet_string_get_c_str(xnet_string_t *s);
 uint32_t xnet_string_get_size(xnet_string_t *s);
-void xnet_string_append(xnet_string_t *s, char *cs, uint32_t cs_size);
+void xnet_string_append(xnet_string_t *as, xnet_string_t *bs);
+void xnet_string_append_cs(xnet_string_t *s, char *cs);
 void xnet_string_add(xnet_string_t *s, char c);
 int xnet_string_compare_cs(xnet_string_t *s, const char *cs);
+int xnet_string_casecompare_cs(xnet_string_t *s, const char *cs);
 int xnet_string_toint(xnet_string_t *s);
 
 #endif //_XNET_STRING_H_
