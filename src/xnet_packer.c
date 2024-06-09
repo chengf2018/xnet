@@ -26,7 +26,7 @@ xnet_unpacker_free(xnet_unpacker_t *up) {
 //return 0:success
 //return -1:fail
 int
-xnet_unpacker_recv(xnet_unpacker_t *up, char *buffer, uint32_t sz) {
+xnet_unpacker_recv(xnet_unpacker_t *up, const char *buffer, uint32_t sz) {
 	uint32_t ret;
 
 	ret = up->um(up, buffer, sz);
@@ -94,11 +94,11 @@ push_value_char(xnet_httprequest_t *req, char c) {
 }
 
 static int
-parse_request(xnet_httprequest_t *req, char *buffer, uint32_t sz, uint32_t body_limit) {
+parse_request(xnet_httprequest_t *req, const char *buffer, uint32_t sz, uint32_t body_limit) {
 	uint16_t state = req->state;
 	uint16_t subState = req->subState;
-	char *q = buffer;
-	char *eq = q + sz;
+	const char *q = buffer;
+	const char *eq = q + sz;
 	xnet_httpheader_t *length_header;
 	uint32_t version_sz;
 
@@ -307,7 +307,7 @@ _out:
 }
 
 uint32_t
-xnet_unpack_http(xnet_unpacker_t *up, char *buffer, uint32_t sz) {
+xnet_unpack_http(xnet_unpacker_t *up, const char *buffer, uint32_t sz) {
 	xnet_httprequest_t *req = (xnet_httprequest_t *)up->arg;
 	int ret, err_code;
 
@@ -530,8 +530,13 @@ read_size(char header[BUFFER_HEADER_SIZE]) {
 	return sz;
 }
 
+static void
+write_size(uint32_t sz, char *buffer) {
+	memcpy(buffer, &sz, BUFFER_HEADER_SIZE);
+}
+
 uint32_t
-xnet_unpack_sizebuffer(xnet_unpacker_t *up, char *buffer, uint32_t sz) {
+xnet_unpack_sizebuffer(xnet_unpacker_t *up, const char *buffer, uint32_t sz) {
 	uint32_t fill_size = 0;
 	uint32_t fill_body;
 	uint32_t body_size;
@@ -588,12 +593,37 @@ xnet_clear_sizebuffer(void *arg) {
 	memset(sb, 0, sizeof(*sb));
 }
 
-uint32_t
-xnet_unpack_line(xnet_unpacker_t *up, char *buffer, uint32_t sz) {
+int
+xnet_pack_sizebuff(const char *buffer, uint32_t sz, xnet_string_t *out) {
+	char *pack_buffer = malloc(sz + BUFFER_HEADER_SIZE);
+	assert(pack_buffer);
+	write_size(sz, pack_buffer);
+	memcpy(pack_buffer + BUFFER_HEADER_SIZE, buffer, sz);
+	xnet_string_raw_set(out, pack_buffer, sz + BUFFER_HEADER_SIZE);
+	return 0;
+}
 
+uint32_t
+xnet_unpack_line(xnet_unpacker_t *up, const char *buffer, uint32_t sz) {
+	xnet_linebuffer_t *lb = (xnet_linebuffer_t *)up->arg;
+	const char *q = buffer;
+	const char *eq = q + sz;
+	while (q < eq && *q != '\n') {
+		if (up->limit != 0 && xnet_string_get_size(&lb->line_str) >= up->limit) {
+			return 0;
+		}
+		xnet_string_add(&lb->line_str, *q);
+		q++;
+	}
+	if (*q == '\n') {
+		q++;
+		up->full = true;
+	}
+	return (uint32_t)(q - buffer);
 }
 
 void
 xnet_clear_line(void *arg) {
-
+	xnet_linebuffer_t *lb = (xnet_linebuffer_t *)arg;
+	xnet_string_clear(&lb->line_str);
 }

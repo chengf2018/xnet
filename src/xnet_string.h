@@ -21,6 +21,8 @@ xnet_string_t *xnet_string_create_link();
 void xnet_string_destroy(xnet_string_t *s);
 void xnet_string_set(xnet_string_t *s, const char *cs, uint32_t cs_size);
 void xnet_string_set_cs(xnet_string_t *s, const char *cs);
+void xnet_string_raw_set(xnet_string_t *s, char *cs, uint32_t cs_size);
+void xnet_string_raw_set_cs(xnet_string_t *s, char *cs);
 char *xnet_string_get_str(xnet_string_t *s);
 char *xnet_string_get_c_str(xnet_string_t *s);
 uint32_t xnet_string_get_size(xnet_string_t *s);

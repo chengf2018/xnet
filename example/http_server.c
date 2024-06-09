@@ -6,6 +6,10 @@ static xnet_socket_t *g_s;
 static void
 error_func(struct xnet_context_t *ctx, xnet_socket_t *s, short what) {
 	xnet_error(ctx, "-----socket [%d] error, what:[%u]", s->id, what);
+	if (s->unpacker) {
+		xnet_unpacker_free(s->unpacker);
+		s->unpacker = NULL;
+	}
 }
 
 static int

@@ -3,7 +3,7 @@ BASE_SRC_C = src/xnet.c src/xnet_socket.c src/xnet_timeheap.c \
 		src/xnet_util.c src/malloc_ref.c src/xnet_packer.c \
 		src/xnet_string.c
 
-alltest : test test_unpacker
+alltest : test test_packer
 allexample : http_server
 
 test : test/test.c src/xnet_timeheap.c src/xnet_config.c src/xnet_util.c

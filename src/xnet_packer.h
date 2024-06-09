@@ -8,7 +8,7 @@ typedef struct xnet_unpacker xnet_unpacker_t;
 
 
 typedef void (*unpack_callback_t)(xnet_unpacker_t *up, void *arg);
-typedef uint32_t (*unpack_method_t)(xnet_unpacker_t *up, char *buffer, uint32_t sz);
+typedef uint32_t (*unpack_method_t)(xnet_unpacker_t *up, const char *buffer, uint32_t sz);
 typedef void (*clear_method_t)(void *arg);
 
 struct xnet_unpacker {
@@ -26,9 +26,9 @@ struct xnet_unpacker {
 
 xnet_unpacker_t *xnet_unpacker_new(uint32_t arg_sz, unpack_callback_t cb, unpack_method_t um, clear_method_t cm, uint32_t limit);
 void xnet_unpacker_free(xnet_unpacker_t * up);
-int xnet_unpacker_recv(xnet_unpacker_t *up, char *buffer, uint32_t sz);
+int xnet_unpacker_recv(xnet_unpacker_t *up, const char *buffer, uint32_t sz);
 
-
+/*http 封包解包*/
 enum http_state_e {
 	HTTP_STATE_METHOD = 0,
 	HTTP_STATE_URL,
@@ -74,7 +74,7 @@ typedef struct {
  * >0:recv len
  * 0:error
  */
-uint32_t xnet_unpack_http(xnet_unpacker_t *up, char *buffer, uint32_t sz);
+uint32_t xnet_unpack_http(xnet_unpacker_t *up, const char *buffer, uint32_t sz);
 void xnet_clear_http(void *arg);
 xnet_httpheader_t *xnet_get_http_header_value(void *req_or_rsp, const char *key);
 int xnet_pack_http(xnet_httpresponse_t *rsp, xnet_string_t *out);
@@ -83,6 +83,7 @@ void xnet_add_http_rsp_header(xnet_httpresponse_t *rsp, const char *key, const c
 void xnet_set_http_rsp_body(xnet_httpresponse_t *rsp, const char *body);
 void xnet_clear_http_rsp(xnet_httpresponse_t *rsp);
 
+/*4字节长度+实际数据*/
 #define BUFFER_HEADER_SIZE sizeof(uint32_t)
 typedef struct {
 	uint32_t buffer_size;
@@ -91,12 +92,16 @@ typedef struct {
 	char header[BUFFER_HEADER_SIZE];
 } xnet_sizebuffer_t;
 
-uint32_t xnet_unpack_sizebuffer(xnet_unpacker_t *up, char *buffer, uint32_t sz);
+uint32_t xnet_unpack_sizebuffer(xnet_unpacker_t *up, const char *buffer, uint32_t sz);
 void xnet_clear_sizebuffer(void *arg);
+int xnet_pack_sizebuff(const char *buffer, uint32_t sz, xnet_string_t *out);
 
+/*以'\n'结尾的行*/
+typedef struct {
+	xnet_string_t line_str;
+} xnet_linebuffer_t;
 
-
-uint32_t xnet_unpack_line(xnet_unpacker_t *up, char *buffer, uint32_t sz);
+uint32_t xnet_unpack_line(xnet_unpacker_t *up, const char *buffer, uint32_t sz);
 void xnet_clear_line(void *arg);
 
 #endif //_UNPACKER_H_

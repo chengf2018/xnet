@@ -26,9 +26,10 @@
 * udp支持
 * udp测试
 * socket数据包多发优化，共用一个数据包
+* pack/unpack机制
 
 ## todo list
-* pack/unpack机制
+
 * 绑定lua
 * 优化排版
 
@@ -99,3 +100,10 @@ server初始化配置、代码优化完善
 
 6.7
 1.完成http unpack，以及测试
+
+6.8
+1.完成简单的http server示例
+2.多发接口优化
+
+6.10
+1.完成sizebuffer/linebuffer的pack/unpack

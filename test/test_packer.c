@@ -14,25 +14,27 @@ sizebuffer_callback(xnet_unpacker_t *up, void *arg) {
 }
 
 void
-test_sizebuffer_unpacker() {
+test_sizebuffer() {
 	xnet_unpacker_t *up;
 	uint32_t len = strlen(g_sizebuff_pack_text) + 1;
-	char buffer[512];
+	xnet_string_t buffer;
 	int ret;
 printf("--start test sizebuffer unpacker--\n");
+	xnet_string_init(&buffer);
 	up = xnet_unpacker_new(sizeof(xnet_sizebuffer_t), sizebuffer_callback, xnet_unpack_sizebuffer, xnet_clear_sizebuffer, 1024);
 	assert(up);
 
-	memcpy(buffer, &len, sizeof(len));
-	memcpy(buffer+sizeof(len), g_sizebuff_pack_text, len);
-	ret = xnet_unpacker_recv(up, buffer, len);
+	xnet_pack_sizebuff(g_sizebuff_pack_text, len, &buffer);
+
+	ret = xnet_unpacker_recv(up, xnet_string_get_str(&buffer), len);
 	assert(ret == 0);
 printf("step1,xnet_unpacker_recv, ret[%d]\n", ret);
-	ret = xnet_unpacker_recv(up, buffer+len, sizeof(len));
+	ret = xnet_unpacker_recv(up, xnet_string_get_str(&buffer)+len, sizeof(len));
 printf("step2,xnet_unpacker_recv, ret[%d]\n", ret);
 	assert(ret == 0);
 
 	xnet_unpacker_free(up);
+	xnet_string_clear(&buffer);
 printf("--finshed sizebuffer unpacker test--\n");
 }
 
@@ -118,7 +120,7 @@ printf("body:\n%s\n", xnet_string_get_c_str(req->body));
 }
 
 void
-test_http_unpacker() {
+test_http_unpack() {
 	xnet_unpacker_t *up;
 	uint32_t len;
 
@@ -146,7 +148,7 @@ static const char *http_pack_expect = \
 ;
 
 void
-test_http_packer() {
+test_http_pack() {
 	xnet_string_t buffer;
 	xnet_httpresponse_t rsp = {};
 printf("--start http packer test--\n");
@@ -163,10 +165,38 @@ printf("--start http packer test--\n");
 printf("--finshed http packer test--\n");
 }
 
+const char *g_line_case = "hello\nwho are you?\n";
+static int g_line_index = 0;
+static char *g_line_expect[] = {"hello", "who are you?"};
+
+static void
+line_callback(xnet_unpacker_t *up, void *arg) {
+	xnet_linebuffer_t *lb = (xnet_linebuffer_t *)arg;
+	printf("recv line:[%s]\n", xnet_string_get_c_str(&lb->line_str));
+	assert(strcmp(g_line_expect[g_line_index], xnet_string_get_c_str(&lb->line_str)) == 0);
+	g_line_index++;
+}
+
+void
+test_line_unpack() {
+	xnet_unpacker_t *up;
+	int ret;
+printf("--start line unpack test--\n");
+	up = xnet_unpacker_new(sizeof(xnet_linebuffer_t), line_callback, xnet_unpack_line, xnet_clear_line, 1024);
+	assert(up);
+	ret = xnet_unpacker_recv(up, g_line_case, strlen(g_line_case));
+printf("xnet_unpacker_recv ret:[%d]\n", ret);
+	assert(ret == 0);
+
+	xnet_unpacker_free(up);
+printf("--finished line unpack test--\n");
+}
+
 int
 main(int argc, char **argv) {
-	test_sizebuffer_unpacker();
-	test_http_unpacker();
-	test_http_packer();
+	test_sizebuffer();
+	test_http_unpack();
+	test_http_pack();
+	test_line_unpack();
 	return 0;
 }

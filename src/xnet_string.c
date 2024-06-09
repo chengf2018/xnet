@@ -31,7 +31,10 @@ xnet_string_init(xnet_string_t *s) {
 
 inline void
 xnet_string_clear(xnet_string_t *s) {
-	if (s->str) free(s->str);
+	if (s->str) {
+		free(s->str);
+		s->str = NULL;
+	}
 	memset(s, 0, sizeof(xnet_string_t));
 }
 
@@ -70,8 +73,21 @@ xnet_string_set(xnet_string_t *s, const char *cs, uint32_t cs_size) {
 
 void
 xnet_string_set_cs(xnet_string_t *s, const char *cs) {
-	uint32_t cs_size = strlen(cs);
-	xnet_string_set(s, cs, cs_size);
+	xnet_string_set(s, cs, strlen(cs));
+}
+
+void
+xnet_string_raw_set(xnet_string_t *s, char *cs, uint32_t cs_size) {
+	if (s->str)
+		free(s->str);
+
+	s->str = cs;
+	s->capacity = s->size = cs_size;
+}
+
+void
+xnet_string_raw_set_cs(xnet_string_t *s, char *cs) {
+	xnet_string_raw_set(s, cs, strlen(cs));
 }
 
 inline char *
