@@ -91,6 +91,7 @@ typedef struct {
 
 typedef struct {
 	char *log_path;
+	bool disable_thread;
 } xnet_init_config_t;
 
 #endif //_XNET_STRUCT_H_

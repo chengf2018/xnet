@@ -19,18 +19,24 @@ typedef struct {
     FILE *stdlog;
     xnet_context_t *log_ctx;
     pthread_t pid;
+    bool disable_thread;
 } log_context_t;
 
 static log_context_t g_log_context;
 
-static int
-log_command_func(xnet_context_t *ctx, xnet_context_t *source, int command, void *data, int sz) {
+static void
+write_log(xnet_context_t *ctx, int source, void *data, int sz) {
     char time_str[128];
     timestring(ctx->nowtime/1000, time_str, sizeof(time_str));
-    fprintf(g_log_context.stdlog, "[%d][%s.%03ld]:", command, time_str, ctx->nowtime%1000);
+    fprintf(g_log_context.stdlog, "[%d][%s.%03ld]:", source, time_str, ctx->nowtime%1000);
     fwrite(data, sz, 1, g_log_context.stdlog);
     fprintf(g_log_context.stdlog, "\n");
     fflush(g_log_context.stdlog);
+}
+
+static int
+log_command_func(xnet_context_t *ctx, xnet_context_t *source, int command, void *data, int sz) {
+    write_log(ctx, command, data, sz);
     return 0;
 }
 
@@ -47,10 +53,10 @@ thread_log(void *p) {
 }
 
 static void
-log_init(const char *log_filename) {
-    xnet_context_t *log_ctx;
-    FILE *fp;
-    pthread_t pid;
+log_init(const char *log_filename, bool disable_thread) {
+    xnet_context_t *log_ctx = NULL;
+    FILE *fp = NULL;
+    pthread_t pid = 0;
     int ret;
 
     g_log_context.filename = NULL;
@@ -65,18 +71,18 @@ log_init(const char *log_filename) {
         }
     }
 
-    log_ctx = xnet_create_context();
-
-    if (!log_ctx) return;
-
-    pid = 0;
-    xnet_register_command(log_ctx, log_command_func);
-    ret = pthread_create(&pid, NULL, thread_log, log_ctx);
-    if (ret != 0) {
-        perror("create log thread error");
-        exit(1);
+    if (!disable_thread) {
+        log_ctx = xnet_create_context();
+        if (!log_ctx) return;
+        xnet_register_command(log_ctx, log_command_func);
+        ret = pthread_create(&pid, NULL, thread_log, log_ctx);
+        if (ret != 0) {
+            perror("create log thread error");
+            exit(1);
+        }
     }
-
+    
+    g_log_context.disable_thread = disable_thread;
     g_log_context.log_ctx = log_ctx;
     g_log_context.pid = pid;
 }
@@ -248,8 +254,9 @@ ctrl_cmd(xnet_context_t *ctx) {
 int
 xnet_init(xnet_init_config_t *init_config) {
     const char *log_path = init_config ? init_config->log_path : NULL;
+    bool disable_thread = init_config ? init_config->disable_thread : false;
     xnet_socket_init();
-    log_init(log_path);
+    log_init(log_path, disable_thread);
     return 0;
 }
 
@@ -307,8 +314,6 @@ xnet_error(xnet_context_t *ctx, char *msg, ...) {
     int len, max_size;
     char *data;
 
-    if (!g_log_context.log_ctx) return;
-
     va_start(ap, msg);
     len = xnet_vsnprintf(tmp, sizeof(tmp), msg, ap);
     va_end(ap);
@@ -334,7 +339,11 @@ xnet_error(xnet_context_t *ctx, char *msg, ...) {
         return;
     }
 
-    xnet_send_command(g_log_context.log_ctx, ctx, ctx->id, data, len);
+    if (g_log_context.log_ctx) {
+        xnet_send_command(g_log_context.log_ctx, ctx, ctx->id, data, len);
+        return;
+    }
+    write_log(ctx, ctx->id, data, len);
 }
 
 void

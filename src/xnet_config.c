@@ -293,7 +293,7 @@ parse_field(xnet_config_t *config, loadfile_t *lf, tempbuff_t *tb) {
 
 	tempbuff_save(tb, '\0');
 	key = strdup(tb->buffer);
-printf("parse_field, key:%s\n", key);
+
 	skipblank(lf);
 	c = nextc(lf);
 	if (c != '=') goto _PARSE_ERROR;
@@ -302,13 +302,6 @@ printf("parse_field, key:%s\n", key);
 	tempbuff_reset(tb);
 	c = parse_value(lf, tb, &value_type, &value);
 	if (c == -2 || value_type == VALUE_TYPE_NIL) goto _PARSE_ERROR;
-//test print
-if (value_type == VALUE_TYPE_INT)
-	printf("paruse_value, value:[%d]\n", value.i);
-else if(value_type == VALUE_TYPE_STRING)
-	printf("paruse_value, value:[%s]\n", value.s);
-else if (value_type == VALUE_TYPE_BOOL)
-	printf("paruse_value, value:[%s]\n", value.b ? "true" : "false");
 
 	if (!config_map_insert(&config->fields, key, value_type, value, false)) {
 		printf("repated field:%s\n", key);
@@ -331,7 +324,7 @@ xnet_parse_config(xnet_config_t *config, const char *filename) {
 	memset(&lf, 0, sizeof(lf));
 	lf.fp = fp;
 	tempbuff_init(&tb);
-printf("parseconfig start\n");
+
 	for (;;) {
 		c = parse_field(config, &lf, &tb);
 		if (c < 0) break;
@@ -342,7 +335,7 @@ printf("parseconfig start\n");
 			break;
 		}
 	}
-printf("parseconfig end\n");
+
 	tempbuff_free(&tb);
 	fclose(fp);
 	return c == -1 ? 0 : -2;

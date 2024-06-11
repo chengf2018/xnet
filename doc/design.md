@@ -1,37 +1,28 @@
-## design
-1.xnet实现一个库和一个server程序，库是可以独立分离出来的
-2.server程序绑定lua，可以用lua方便地处理网络消息
-3.windows下使用select，linux下使用epoll
-4.大体参考libevent和skynet的设计
-5.尽量将socket大部分跨平台代码在xnet_socket中实现
-6.通过注册回调函数处理socket io事件
-7.可以通过注册command回调处理用户定义事件
-
 ## finished
-* 实现数据收发、监听
-* 先只实现单线程模式
-* 编写makefile，调试
-* socket 改为异步，设置keepalive
-* error改为跨平台
-* 实现管道命令机制
-* 实现connect
-* 实现linux平台支持
-* 定时机制
-* 多线程支持 管道命令完善
-* 半关闭机制（主动关闭前先推送完队列中的数据）
-* 异步日志
-* context生命周期优化，ctx如果被释放？但是还有引用？
-* 配置解析模块，server支持配置传参
-* ipv6支持
-* udp支持
-* udp测试
-* socket数据包多发优化，共用一个数据包
-* pack/unpack机制
+* 实现数据收发、监听 *
+* 先只实现单线程模式 *
+* 编写makefile，调试 *
+* socket 改为异步，设置keepalive *
+* error改为跨平台 *
+* 实现管道命令机制 *
+* 实现connect *
+* 实现linux平台支持 *
+* 定时机制 *
+* 多线程支持 管道命令完善 *
+* 半关闭机制（主动关闭前先推送完队列中的数据） *
+* 异步日志 *
+* context生命周期优化，ctx如果被释放？但是还有引用？ *
+* 配置解析模块，server支持配置传参 *
+* ipv6支持 *
+* udp支持 *
+* udp测试 *
+* socket数据包多发优化，共用一个数据包 *
+* pack/unpack机制 *
+* 异步日志支持开关 *
 
 ## todo list
 
-* 绑定lua
-* 优化排版
+* 优化排版 *
 
 ## log
 4.18
