@@ -50,8 +50,11 @@ xnet_unpacker_recv(xnet_unpacker_t *up, const char *buffer, uint32_t sz) {
 		up->cb(up, up->arg);
 		up->cm(up->arg);
 		up->full = false;
+	} else if (ret == 0) {
+		up->cm(up->arg);
+		return -1;
 	}
-	return (ret == 0) ? -1 : 0;
+	return 0;
 }
 
 #define HTTP_VERSION "HTTP/1.1"
@@ -314,6 +317,7 @@ xnet_unpack_http(xnet_unpacker_t *up, const char *buffer, uint32_t sz) {
 	ret = parse_request(req, buffer, sz, up->limit);
 	if (ret == -1) {
 		//bad request
+		if (req->code == 0) req->code = 400;
 		up->full = true;
 		return 0;
 	}
@@ -608,8 +612,10 @@ xnet_unpack_line(xnet_unpacker_t *up, const char *buffer, uint32_t sz) {
 	xnet_linebuffer_t *lb = (xnet_linebuffer_t *)up->arg;
 	const char *q = buffer;
 	const char *eq = q + sz;
+	char *str;
+
 	while (q < eq && *q != '\n') {
-		if (up->limit != 0 && xnet_string_get_size(&lb->line_str) >= up->limit) {
+		if (up->limit != 0 && xnet_string_get_size(&lb->line_str) > up->limit) {
 			return 0;
 		}
 		xnet_string_add(&lb->line_str, *q);
@@ -618,6 +624,14 @@ xnet_unpack_line(xnet_unpacker_t *up, const char *buffer, uint32_t sz) {
 	if (*q == '\n') {
 		q++;
 		up->full = true;
+		lb->sep = false;
+		if (xnet_string_get_size(&lb->line_str) > 0) {
+			str = xnet_string_get_str(&lb->line_str);
+			if (str[xnet_string_get_size(&lb->line_str)-1] == '\r') {
+				lb->line_str.size --;
+				lb->sep = true;
+			}
+		}
 	}
 	return (uint32_t)(q - buffer);
 }

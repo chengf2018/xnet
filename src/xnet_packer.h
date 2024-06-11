@@ -96,9 +96,10 @@ uint32_t xnet_unpack_sizebuffer(xnet_unpacker_t *up, const char *buffer, uint32_
 void xnet_clear_sizebuffer(void *arg);
 int xnet_pack_sizebuff(const char *buffer, uint32_t sz, xnet_string_t *out);
 
-/*以'\n'结尾的行*/
+/*以'\n'或者'\r\n'结尾的行*/
 typedef struct {
 	xnet_string_t line_str;
+	bool sep;//true:'\r\n' false:'\n'
 } xnet_linebuffer_t;
 
 uint32_t xnet_unpack_line(xnet_unpacker_t *up, const char *buffer, uint32_t sz);

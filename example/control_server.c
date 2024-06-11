@@ -24,51 +24,33 @@ recv_func(struct xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int size, 
 }
 
 static void
-response(xnet_context_t *ctx, xnet_socket_t *s, xnet_httpresponse_t *rsp) {
-	xnet_string_t out_str;
+response(xnet_context_t *ctx, xnet_socket_t *s, const char *command) {
+	//to deal command...
 
-	xnet_string_init(&out_str);
-printf("pack http response\n");
-	xnet_pack_http(rsp, &out_str);
-printf("send http response, sz:[%d]\n", xnet_string_get_size(&out_str));
-printf("[%s]\n", xnet_string_get_c_str(&out_str));
-	xnet_tcp_send_buffer(ctx, s, xnet_string_get_str(&out_str), xnet_string_get_size(&out_str), true);
-	//xnet_string_clear(&out_str);
-	xnet_close_socket(ctx, s);
+	xnet_tcp_send_buffer(ctx, s, "OK\r\n", 4, false);
 }
 
 static void
-http_request(xnet_unpacker_t *up, void *arg) {
-	xnet_httprequest_t *req = (xnet_httprequest_t *)arg;
+deal_command(xnet_unpacker_t *up, void *arg) {
+	xnet_linebuffer_t *req = (xnet_linebuffer_t *)arg;
 	xnet_context_t *ctx = (xnet_context_t *)up->user_ptr;
 	xnet_socket_t *s = (xnet_socket_t *)up->user_arg;
-	xnet_httpresponse_t rsp = {};
-	int i;
 
-	printf("method:[%s], url:[%s], version:[%s]\n", xnet_string_get_c_str(&req->method),
-		xnet_string_get_c_str(&req->url), xnet_string_get_c_str(&req->version));
-	for (i=0; i<req->header_count; i++) {
-		printf("-header-[%s]: [%s]\n", xnet_string_get_c_str(&req->header[i].key), 
-			xnet_string_get_c_str(&req->header[i].value));
-	}
-
-	xnet_set_http_rsp_code(&rsp, req->code);
-	xnet_add_http_rsp_header(&rsp, "Content-Type", "text/html");
-	//xnet_add_http_rsp_header(&rsp, "Transfer-Encoding", "chunked");
-	xnet_set_http_rsp_body(&rsp, "<p>hello world!</p>");
-
-	printf("respone http, state:[%d]:\n", req->code);
-	response(ctx, s, &rsp);
+	printf("command:[%s]\n", xnet_string_get_c_str(&req->line_str));
+	printf("sep:[%d]\n", req->sep);
+	response(ctx, s, xnet_string_get_c_str(&req->line_str));
+	xnet_tcp_send_buffer(ctx, s, ">", 1, false);
 }
 
 static void
 listen_func(xnet_context_t *ctx, xnet_socket_t *s, xnet_socket_t *ns, xnet_addr_t *addr_info) {
     char str[64] = {0};
+    const char welcome[] = "welcome to console:\r\n>";
     xnet_unpacker_t *up;
     xnet_addrtoa(addr_info, str);
 	xnet_error(ctx, "-----socket [%d] accept new, new socket:[%d], [%s]", s->id, ns->id, str);
 
-	up = xnet_unpacker_new(sizeof(xnet_httprequest_t), http_request, xnet_unpack_http, xnet_clear_http, 1024);
+	up = xnet_unpacker_new(sizeof(xnet_linebuffer_t), deal_command, xnet_unpack_line, xnet_clear_line, 256);
 	if (up == NULL) {
 		printf("new unpacker error\n");
 		return;
@@ -76,6 +58,7 @@ listen_func(xnet_context_t *ctx, xnet_socket_t *s, xnet_socket_t *ns, xnet_addr_
 	up->user_ptr = ctx;
 	up->user_arg = ns;
 	ns->unpacker = up;
+	xnet_tcp_send_buffer(ctx, ns, welcome, sizeof(welcome)-1, false);
 }
 
 int
@@ -96,7 +79,7 @@ main(int argc, char** argv) {
     }
 
     xnet_register_listener(ctx, listen_func, error_func, recv_func);
-    ret = xnet_tcp_listen(ctx, "0.0.0.0", 8080, 200, &g_s);
+    ret = xnet_tcp_listen(ctx, "0.0.0.0", 8082, 200, &g_s);
     if (ret != 0) goto _END;
 	
 	xnet_error(ctx, "------start loop------");
