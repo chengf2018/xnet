@@ -99,8 +99,6 @@ xnet_string_get_str(xnet_string_t *s) {
 //自动填充\0结尾
 inline char *
 xnet_string_get_c_str(xnet_string_t *s) {
-	uint32_t new_capacity;
-
 	if (s->size == 0) return "";
 	if (s->str[s->size-1] == '\0') {
 		return s->str;
