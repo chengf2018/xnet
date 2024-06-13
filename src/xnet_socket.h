@@ -124,7 +124,8 @@ typedef struct {
     SOCKET_TYPE epoll_fd;
     struct epoll_event event[POLL_EVENT_MAX];
 #endif
-    xnet_socket_t slots[MAX_CLIENT_NUM];
+    xnet_socket_t *slots;
+    int slot_size;
     int slot_index;
     xnet_poll_event_t poll_event;
 

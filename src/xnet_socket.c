@@ -52,16 +52,39 @@ xnet_addr_to_sockaddr(xnet_addr_t *addr, union sockaddr_all *sa) {
     }
 }
 
+static inline void
+init_socket_slot(xnet_socket_t *s) {
+    s->id = s->fd = 0;
+    s->type = SOCKET_TYPE_INVALID;
+    s->wb_list.head = s->wb_list.tail = NULL;
+    s->wb_size = 0;
+    memset(&s->addr_info, 0, sizeof(s->addr_info));
+}
+
 static int
 alloc_socket_id(xnet_poll_t *poll) {
-    int i, id;
+    int i, id, new_size;
     xnet_socket_t *slots = poll->slots;
-    for (i=0; i<MAX_CLIENT_NUM; i++) {
-        id = (poll->slot_index + i) % MAX_CLIENT_NUM;
+    for (i=0; i<poll->slot_size; i++) {
+        id = (poll->slot_index + i) % poll->slot_size;
         if (slots[id].type == SOCKET_TYPE_INVALID) {
             poll->slot_index = id + 1;
             return id;
         }
+    }
+
+    if (poll->slot_size < MAX_CLIENT_NUM) {
+        new_size = poll->slot_size * 2;
+        slots = realloc(poll->slots, sizeof(*poll->slots)*new_size);
+        if (!slots) return -1;
+
+        for (i=poll->slot_size; i<new_size; i++)
+            init_socket_slot(&slots[id]);
+
+        poll->slot_index = poll->slot_size;
+        poll->slots = slots;
+        poll->slot_size = new_size;
+        return alloc_socket_id(poll);
     }
     return -1;
 }
@@ -76,6 +99,7 @@ new_fd(xnet_poll_t *poll, SOCKET_TYPE fd, int id, uint8_t protocol, bool reading
     s->writing = false;
     s->closing = false;
     s->read_size = MIN_READ_SIZE;
+
     assert(s->wb_list.head == NULL && s->wb_list.tail == NULL);
     s->wb_size = 0;
     memset(&s->addr_info, 0, sizeof(s->addr_info));
@@ -117,8 +141,8 @@ clear_wb_list(xnet_wb_list_t *wb_list) {
             wb_list->head = wb->next;
             free_wb(wb);
         }
-        wb_list->tail = NULL;
     }
+    wb_list->tail = NULL;
 }
 
 int
@@ -147,17 +171,16 @@ xnet_socket_deinit() {
 int
 xnet_poll_init(xnet_poll_t *poll) {
     int i;
-    xnet_socket_t *s;
 
     poll->slot_index = 0;
-    for (i=0; i<MAX_CLIENT_NUM; i++) {
-        s = &poll->slots[i];
-        s->id = s->fd = 0;
-        s->type = SOCKET_TYPE_INVALID;
-        s->wb_list.head = s->wb_list.tail = NULL;
-        s->wb_size = 0;
-        memset(&s->addr_info, 0, sizeof(s->addr_info));
+    poll->slot_size = 32;
+    poll->slots = malloc(sizeof(*poll->slots)*poll->slot_size);
+    if (!poll->slots) {
+        return -1;
     }
+
+    for (i=0; i<poll->slot_size; i++)
+        init_socket_slot(&poll->slots[i]);
 
     //pipe
     SOCKET_TYPE fd[2];
@@ -208,13 +231,15 @@ xnet_poll_deinit(xnet_poll_t *poll) {
     closesocket(poll->send_fd);
     closesocket(poll->recv_fd);
 
-    for (i=0; i<MAX_CLIENT_NUM; i++) {
+    for (i=0; i<poll->slot_size; i++) {
         s = &poll->slots[i];
         if (s->type == SOCKET_TYPE_INVALID && s->fd) {
             closesocket(s->fd);
         }
         clear_wb_list(&s->wb_list);
     }
+    free(poll->slots);
+    poll->slots = NULL;
     return 0;
 }
 
@@ -250,6 +275,8 @@ xnet_poll_closefd(xnet_poll_t *poll, xnet_socket_t *s) {
     s->writing = false;
     s->reading = false;
     s->type = SOCKET_TYPE_INVALID;
+    s->unpacker = NULL;
+    s->user_ptr = NULL;
     clear_wb_list(&s->wb_list);
 }
 
@@ -574,7 +601,6 @@ xnet_recv_data(xnet_poll_t *poll, xnet_socket_t *s, char **out_data) {
 
     if (n == 0) {
         free(buffer);
-        printf("xnet_recv_data close\n");
         return -2;
     }
 
@@ -622,6 +648,7 @@ send_tcp_data(xnet_poll_t *poll, xnet_socket_t *s) {
     xnet_wb_list_t *wb_list = &s->wb_list;
     xnet_write_buff_t *wb;
     int n, err;
+
     while (wb_list->head) {
         wb = wb_list->head;
         for (;;) {
@@ -646,6 +673,7 @@ send_tcp_data(xnet_poll_t *poll, xnet_socket_t *s) {
         free_wb(wb);
     }
 
+    wb_list->tail = NULL;
     if (s->closing) {
         xnet_poll_closefd(poll, s);
     } else {
@@ -683,6 +711,7 @@ send_udp_data(xnet_poll_t *poll, xnet_socket_t *s) {
         wb_list->head = udp_wb->wb.next;
         free_wb((xnet_write_buff_t*)udp_wb);
     }
+    wb_list->tail = NULL;
 
     if (s->closing) {
         xnet_poll_closefd(poll, s);

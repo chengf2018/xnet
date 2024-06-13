@@ -344,6 +344,7 @@ xnet_error(xnet_context_t *ctx, char *msg, ...) {
         return;
     }
     write_log(ctx, ctx->id, data, len);
+    free(data);
 }
 
 void
