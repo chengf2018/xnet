@@ -15,6 +15,7 @@ xnet_unpacker_new(uint32_t arg_sz, unpack_callback_t cb, unpack_method_t um,
 	up->cb = cb;
 	up->um = um;
 	up->cm = cm;
+	return up;
 }
 
 void

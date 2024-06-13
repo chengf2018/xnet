@@ -65,6 +65,7 @@ static int
 alloc_socket_id(xnet_poll_t *poll) {
     int i, id, new_size;
     xnet_socket_t *slots = poll->slots;
+
     for (i=0; i<poll->slot_size; i++) {
         id = (poll->slot_index + i) % poll->slot_size;
         if (slots[id].type == SOCKET_TYPE_INVALID) {
@@ -74,12 +75,12 @@ alloc_socket_id(xnet_poll_t *poll) {
     }
 
     if (poll->slot_size < MAX_CLIENT_NUM) {
-        new_size = poll->slot_size * 2;
+        new_size = poll->slot_size ? (poll->slot_size * 2) : 32;
         slots = realloc(poll->slots, sizeof(*poll->slots)*new_size);
         if (!slots) return -1;
 
         for (i=poll->slot_size; i<new_size; i++)
-            init_socket_slot(&slots[id]);
+            init_socket_slot(&slots[i]);
 
         poll->slot_index = poll->slot_size;
         poll->slots = slots;
@@ -173,6 +174,7 @@ xnet_poll_init(xnet_poll_t *poll) {
     int i;
 
     poll->slot_index = 0;
+
     poll->slot_size = 32;
     poll->slots = malloc(sizeof(*poll->slots)*poll->slot_size);
     if (!poll->slots) {
@@ -238,8 +240,11 @@ xnet_poll_deinit(xnet_poll_t *poll) {
         }
         clear_wb_list(&s->wb_list);
     }
-    free(poll->slots);
-    poll->slots = NULL;
+
+    if (poll->slots) {
+        free(poll->slots);
+        poll->slots = NULL;
+    }
     return 0;
 }
 
