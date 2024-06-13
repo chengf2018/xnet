@@ -22,6 +22,8 @@
 
 ## todo list
 
+* 优化socket slots 占用内存过大问题 *
+* log线程优化 *
 * 优化排版 *
 
 ## log

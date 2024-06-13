@@ -35,6 +35,7 @@ printf("[%s]\n", xnet_string_get_c_str(&out_str));
 	xnet_tcp_send_buffer(ctx, s, xnet_string_get_str(&out_str), xnet_string_get_size(&out_str), true);
 	//xnet_string_clear(&out_str);
 	xnet_close_socket(ctx, s);
+	xnet_clear_http_rsp(rsp);
 }
 
 static void

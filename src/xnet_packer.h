@@ -81,6 +81,9 @@ int xnet_pack_http(xnet_httpresponse_t *rsp, xnet_string_t *out);
 void xnet_set_http_rsp_code(xnet_httpresponse_t *rsp, int code);
 void xnet_add_http_rsp_header(xnet_httpresponse_t *rsp, const char *key, const char *value);
 void xnet_set_http_rsp_body(xnet_httpresponse_t *rsp, const char *body);
+void xnet_raw_set_http_rsp_body(xnet_httpresponse_t *rsp, char *body);
+void xnet_set_http_rsp_byte_body(xnet_httpresponse_t *rsp, const char *body, uint32_t sz);
+void xnet_raw_set_http_rsp_byte_body(xnet_httpresponse_t *rsp, char *body, uint32_t sz);
 void xnet_clear_http_rsp(xnet_httpresponse_t *rsp);
 
 /*4字节长度+实际数据*/
