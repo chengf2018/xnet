@@ -12,6 +12,7 @@
 #define CMD_TYPE_SNED_TCP_PKG 4
 #define CMD_TYPE_BROADCAST_TCP_PKG 5
 #define CMD_TYPE_SEND_UPD_PKG 6
+#define CMD_TYPE_SENDTO_UPD_PKG 7
 #define CMD_TYPE_USER_COMMAND 128
 
 typedef struct {
@@ -28,7 +29,7 @@ static void
 write_log(xnet_context_t *ctx, int source, void *data, int sz) {
     char time_str[128];
     timestring(ctx->nowtime/1000, time_str, sizeof(time_str));
-    fprintf(g_log_context.stdlog, "[%d][%s.%03ld]:", source, time_str, ctx->nowtime%1000);
+    fprintf(g_log_context.stdlog, "[%d][%s.%03I64u]:", source, time_str, ctx->nowtime%1000);
     fwrite(data, sz, 1, g_log_context.stdlog);
     fprintf(g_log_context.stdlog, "\n");
     fflush(g_log_context.stdlog);
@@ -50,6 +51,7 @@ thread_log(void *p) {
         free(g_log_context.filename);
     if (g_log_context.stdlog != stdout)
         fclose(g_log_context.stdlog);
+    return NULL;
 }
 
 static void
@@ -192,6 +194,26 @@ cmd_broad_tcp_pkg(xnet_context_t *ctx, xnet_cmdreq_broadtcp_t *req) {
 }
 
 static void
+cmd_send_udp_pkg(xnet_context_t *ctx, xnet_cmdreq_sendupd_t *req) {
+    xnet_socket_t *s = &ctx->poll.slots[req->id];
+    if (s->type == SOCKET_TYPE_INVALID || s->closing) {
+        free(req->data);
+        return;
+    }
+    append_udp_send_buff(&ctx->poll, s, &s->addr_info, req->data, req->size, true);
+}
+
+static void
+cmd_sendto_udp_pkg(xnet_context_t *ctx, xnet_cmdreq_sendtoupd_t *req) {
+    xnet_socket_t *s = &ctx->poll.slots[req->id];
+    if (s->type == SOCKET_TYPE_INVALID || s->closing) {
+        free(req->data);
+        return;
+    }
+    append_udp_send_buff(&ctx->poll, s, &req->addr, req->data, req->size, true);
+}
+
+static void
 cmd_command(xnet_context_t *ctx, xnet_cmdreq_command_t *req) {
     assert(ctx->command_func);
 
@@ -246,6 +268,12 @@ ctrl_cmd(xnet_context_t *ctx) {
         break;
         case CMD_TYPE_USER_COMMAND:
             cmd_command(ctx, (xnet_cmdreq_command_t *)buffer);
+        break;
+        case CMD_TYPE_SEND_UPD_PKG:
+            cmd_send_udp_pkg(ctx, (xnet_cmdreq_sendupd_t *)buffer);
+        break;
+        case CMD_TYPE_SENDTO_UPD_PKG:
+            cmd_sendto_udp_pkg(ctx, (xnet_cmdreq_sendtoupd_t *)buffer);
         break;
     }
     return -1;
@@ -701,27 +729,39 @@ xnet_asyn_send_tcp_buffer(xnet_context_t *ctx, int id, const char *buffer, int s
     req.pkg.send_tcp_req.data = (char*)buffer;//it will free by receiver
     req.pkg.send_tcp_req.size = sz;
     send_cmd(ctx, &req, CMD_TYPE_SNED_TCP_PKG, sizeof(xnet_cmdreq_sendtcp_t));
+    return 0;
 }
 
-//ids and buffer will free by receiver
 int
 xnet_asyn_broadcast_tcp_buffer(xnet_context_t *ctx, int *ids, const char *buffer, int sz) {
     xnet_cmdreq_t req;
-    
+    //ids and buffer will free by receiver
     req.pkg.broad_tcp_req.ids = ids;
     req.pkg.broad_tcp_req.data = (char*)buffer;
     req.pkg.broad_tcp_req.size = sz;
     send_cmd(ctx, &req, CMD_TYPE_BROADCAST_TCP_PKG, sizeof(xnet_cmdreq_broadtcp_t));
+    return 0;
 }
 
 int
 xnet_asyn_send_udp_buffer(xnet_context_t *ctx, int id, char *buffer, int sz) {
-
+    xnet_cmdreq_t req;
+    req.pkg.send_udp_req.id = id;
+    req.pkg.send_udp_req.data = (char*)buffer;//it will free by receiver
+    req.pkg.send_udp_req.size = sz;
+    send_cmd(ctx, &req, CMD_TYPE_SEND_UPD_PKG, sizeof(xnet_cmdreq_sendupd_t));
+    return 0;
 }
 
 int
 xnet_asyn_sendto_udp_buffer(xnet_context_t *ctx, int id, xnet_addr_t *addr, char *buffer, int sz) {
-
+    xnet_cmdreq_t req;
+    req.pkg.sendto_udp_req.id = id;
+    req.pkg.sendto_udp_req.data = (char*)buffer;//it will free by receiver
+    req.pkg.sendto_udp_req.size = sz;
+    req.pkg.sendto_udp_req.addr = *addr;
+    send_cmd(ctx, &req, CMD_TYPE_SENDTO_UPD_PKG, sizeof(xnet_cmdreq_sendtoupd_t));
+    return 0;
 }
 
 int
@@ -729,6 +769,7 @@ xnet_asyn_close_socket(xnet_context_t *ctx, int id) {
     xnet_cmdreq_t req;
     req.pkg.close_req.id = id;
     send_cmd(ctx, &req, CMD_TYPE_CLOSE, sizeof(xnet_cmdreq_close_t));
+    return 0;
 }
 
 int
@@ -736,4 +777,5 @@ xnet_asyn_exit(xnet_context_t *ctx, xnet_context_t *source) {
     xnet_cmdreq_t req;
     req.pkg.exit_req.source = source;
     send_cmd(ctx, &req, CMD_TYPE_EXIT, sizeof(xnet_cmdreq_exit_t));
+    return 0;
 }

@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -std=gnu99 -pthread
+CFLAGS = -std=gnu99 -pthread -Wall
 BASE_SRC_C = src/xnet.c src/xnet_socket.c src/xnet_timeheap.c \
 		src/xnet_util.c src/malloc_ref.c src/xnet_packer.c \
 		src/xnet_string.c

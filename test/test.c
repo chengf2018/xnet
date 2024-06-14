@@ -10,7 +10,7 @@ dump_timheap(xnet_timeheap_t *th) {
 	xnet_timeinfo_t *heap = th->heap;
 	printf("dump heap:[");
 	for (i=1; i<=th->n; i++) {
-		printf("{%d,%d}", heap[i].id, heap[i].expire);
+		printf("{%d,%I64d}", heap[i].id, heap[i].expire);
 	}
 	printf("] n:%d, size:%d\n", th->n, th->size);
 }
@@ -33,7 +33,7 @@ main(int argc, char** argv) {
 	}
 	for (i=0; i<64; i++) {
 		xnet_timeheap_pop(&th, &ti);
-		printf("pop:[%d,%d]\n", ti.id, ti.expire);
+		printf("pop:[%d,%I64d]\n", ti.id, ti.expire);
 		dump_timheap(&th);
 		if (last_pop != -1){
 			assert(last_pop <= ti.expire);

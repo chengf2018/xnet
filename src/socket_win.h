@@ -6,7 +6,7 @@
 
 //windows下没有pipe函数，模拟实现一个
 static int
-pipe(int pipefd[2]) {
+pipe(SOCKET_TYPE pipefd[2]) {
     SOCKET_TYPE listener = socket(AF_INET, SOCK_STREAM, 0);
     struct sockaddr_in addr = {0};
     socklen_t addrlen = sizeof(addr);

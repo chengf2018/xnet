@@ -313,7 +313,7 @@ _out:
 uint32_t
 xnet_unpack_http(xnet_unpacker_t *up, const char *buffer, uint32_t sz) {
 	xnet_httprequest_t *req = (xnet_httprequest_t *)up->arg;
-	int ret, err_code;
+	int ret;
 
 	ret = parse_request(req, buffer, sz, up->limit);
 	if (ret == -1) {

@@ -76,6 +76,19 @@ typedef struct {
 } xnet_cmdreq_exit_t;
 
 typedef struct {
+	int id;
+	char *data;
+	int size;
+} xnet_cmdreq_sendupd_t;
+
+typedef struct {
+	int id;
+	char *data;
+	int size;
+	xnet_addr_t addr;
+} xnet_cmdreq_sendtoupd_t;
+
+typedef struct {
 	uint8_t header[8];//实际只用了第7和第8byte，8字节只是为了内存对齐
 	union {
 		uint8_t buffer[256];
@@ -86,6 +99,8 @@ typedef struct {
 		xnet_cmdreq_broadtcp_t broad_tcp_req;
 		xnet_cmdreq_command_t command_req;
 		xnet_cmdreq_exit_t exit_req;
+		xnet_cmdreq_sendupd_t send_udp_req;
+		xnet_cmdreq_sendtoupd_t sendto_udp_req;
 	} pkg;
 } xnet_cmdreq_t;
 

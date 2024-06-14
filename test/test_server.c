@@ -66,6 +66,7 @@ thread_worker(void *p) {
 xnet_error(ctx, "start worker thread loop");
     xnet_dispatch_loop(ctx);
 xnet_error(ctx, "worker thread exit loop");
+    return NULL;
 }
 
 static void

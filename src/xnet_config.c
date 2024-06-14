@@ -102,7 +102,7 @@ config_map_reserve(config_map_t *cm) {
 static bool
 config_map_insert(config_map_t *cm, char *key, uint8_t value_type, map_elem_value_t value, bool raw) {
 	unsigned int slot_index;
-	map_elem_t *elem, *last, *p;
+	map_elem_t *elem, *p;
 
 	if (config_map_find(cm, key, NULL)) return false;
 
@@ -177,7 +177,7 @@ peekc(loadfile_t *lf) {
 static int
 skipblank(loadfile_t *lf) {
 	int c = peekc(lf);
-	while (c != -1 && ((char)c==' ')||(char)c=='\t') {
+	while ((c != -1 && ((char)c==' ')) || (char)c=='\t') {
 		nextc(lf); c = peekc(lf);
 	};
 	return c;
@@ -205,7 +205,7 @@ skipnoteline(loadfile_t *lf) {
 }
 #define IS_NUMBER_CHAR(c) ((char)(c)>='0' && (char)(c) <= '9')
 #define IS_TOKEN_FIRST_CHAR(c) (((char)(c)>='a' && (char)(c)<='z') || ((char)(c)>='A' && (char)(c)<='Z') || (char)(c) == '_')
-#define IS_TOKEN_OTHER_CHAR(c) IS_TOKEN_FIRST_CHAR(c) || IS_NUMBER_CHAR(c)
+#define IS_TOKEN_OTHER_CHAR(c) (IS_TOKEN_FIRST_CHAR(c) || IS_NUMBER_CHAR(c))
 #define IS_TOKEN_TRUE(c, i) ("true"[(i)] == (c))
 #define IS_TOKEN_FALSE(c, i) ("false"[(i)] == (c))
 

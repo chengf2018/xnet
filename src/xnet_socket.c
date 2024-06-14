@@ -155,9 +155,8 @@ xnet_socket_init() {
         printf("Failed to initialize Winsock\n");
         return 1;
     }
-#else
-    return 0;
 #endif
+    return 0;
 }
 
 int
@@ -259,6 +258,7 @@ xnet_poll_addfd(xnet_poll_t *poll, SOCKET_TYPE fd, int id) {
     xnet_socket_t *s = &poll->slots[id];
     poll_add(poll->epoll_fd, fd, s);
 #endif
+    return 0;
 }
 
 int
@@ -283,6 +283,7 @@ xnet_poll_closefd(xnet_poll_t *poll, xnet_socket_t *s) {
     s->unpacker = NULL;
     s->user_ptr = NULL;
     clear_wb_list(&s->wb_list);
+    return 0;
 }
 
 int
@@ -564,7 +565,7 @@ xnet_set_udp_socket_addr(xnet_poll_t *poll, xnet_socket_t *s, const char *host, 
     if (ai_list->ai_family == AF_INET) {
         protocol = SOCKET_PROTOCOL_UDP;
         addr_type = SOCKET_ADDR_TYPE_IPV4;
-    } else if (ai_list->ai_family = AF_INET6) {
+    } else if (ai_list->ai_family == AF_INET6) {
         protocol = SOCKET_PROTOCOL_UDP_IPV6;
         addr_type = SOCKET_ADDR_TYPE_IPV6;
     } else {
