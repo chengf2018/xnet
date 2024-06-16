@@ -808,7 +808,7 @@ block_send(SOCKET_TYPE fd, void *buffer, int sz) {
 }
 
 inline int
-get_sockopt(SOCKET_TYPE fd, int level, int optname, int *optval, int *optlen) {
+get_sockopt(SOCKET_TYPE fd, int level, int optname, int *optval, socklen_t *optlen) {
 #ifdef _WIN32
     return getsockopt(fd, level, optname, (char*)optval, optlen);
 #else

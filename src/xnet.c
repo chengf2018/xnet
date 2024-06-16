@@ -29,7 +29,7 @@ static void
 write_log(xnet_context_t *ctx, int source, void *data, int sz) {
     char time_str[128];
     timestring(ctx->nowtime/1000, time_str, sizeof(time_str));
-    fprintf(g_log_context.stdlog, "[%d][%s.%03I64u]:", source, time_str, ctx->nowtime%1000);
+    fprintf(g_log_context.stdlog, "[%d][%s.%03lu]:", source, time_str, ctx->nowtime%1000);
     fwrite(data, sz, 1, g_log_context.stdlog);
     fprintf(g_log_context.stdlog, "\n");
     fflush(g_log_context.stdlog);

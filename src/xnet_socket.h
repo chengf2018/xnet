@@ -173,7 +173,7 @@ void append_send_buff(xnet_poll_t *poll, xnet_socket_t *s, const char *buffer, i
 void append_udp_send_buff(xnet_poll_t *poll, xnet_socket_t *s, xnet_addr_t *addr, const char *buffer, int sz, bool raw);
 void block_recv(SOCKET_TYPE fd, void *buffer, int sz);
 void block_send(SOCKET_TYPE fd, void *buffer, int sz);
-int get_sockopt(SOCKET_TYPE fd, int level, int optname, int *optval, int *optlen);
+int get_sockopt(SOCKET_TYPE fd, int level, int optname, int *optval, socklen_t *optlen);
 
 
 #endif //_XNET_SOCKET_H_
