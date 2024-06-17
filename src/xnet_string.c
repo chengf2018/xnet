@@ -136,16 +136,6 @@ xnet_string_add(xnet_string_t *s, char c) {
 	s->str[s->size++] = c;
 }
 
-static int
-__strcasecmp(const char *s1, const char *s2) {
-    for (; *s1 && *s2; ++s1, ++s2) {
-        if (tolower((unsigned char)*s1) != tolower((unsigned char)*s2)) {
-            return tolower((unsigned char)*s1) - tolower((unsigned char)*s2);
-        }
-    }
-    return (*s1 == '\0') ? (*s2 == '\0' ? 0 : -1) : 1;
-}
-
 int
 xnet_string_compare_cs(xnet_string_t *s, const char *cs) {
 	char *str = xnet_string_get_c_str(s);
@@ -155,7 +145,7 @@ xnet_string_compare_cs(xnet_string_t *s, const char *cs) {
 int
 xnet_string_casecompare_cs(xnet_string_t *s, const char *cs) {
 	char *str = xnet_string_get_c_str(s);
-	return __strcasecmp(str, cs);
+	return strcasecmp(str, cs);
 }
 
 int

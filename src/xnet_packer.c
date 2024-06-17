@@ -51,7 +51,10 @@ xnet_unpacker_recv(xnet_unpacker_t *up, const char *buffer, uint32_t sz) {
 		up->cb(up, up->arg);
 		up->cm(up->arg);
 		up->full = false;
-	} else if (ret == 0) {
+		return (ret == 0) ? -1 : 0;
+	}
+
+	if (ret == 0) {
 		up->cm(up->arg);
 		return -1;
 	}
@@ -128,26 +131,37 @@ parse_request(xnet_httprequest_t *req, const char *buffer, uint32_t sz, uint32_t
 						req->code = 400;
 						return -1;
 					}
+				} else {
+					req->code = 400;
+					return -1;
 				}
 			break;
-			case HTTP_STATE_URL:/*[^ ]+ ' '*/
+			case HTTP_STATE_URL:/*/[^ ]+ ' '*/
 				if (xnet_string_get_size(&req->url) >= 1024) {
 					req->code = 414;
 					return -1;
 				}
-
-				if (*q != ' ') {
-					xnet_string_add(&req->url, *q);
-					q++;
-				} else {
-					if (xnet_string_get_size(&req->url) > 0) {
+				if (subState == 0) {
+					if (*q == '/') {
+						xnet_string_add(&req->url, *q);
 						q++;
-						state = HTTP_STATE_VERSION;
-						subState = 0;
+						subState = 1;
 					} else {
 						req->code = 400;
 						return -1;
 					}
+				} else if (subState == 1) {
+					if (*q != ' ') {
+						xnet_string_add(&req->url, *q);
+						q++;
+					} else {
+						q++;
+						state = HTTP_STATE_VERSION;
+						subState = 0;
+					}
+				} else {
+					req->code = 400;
+					return -1;
 				}
 			break;
 			case HTTP_STATE_VERSION:/*'HTTP/1.1' \r\n*/

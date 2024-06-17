@@ -101,7 +101,7 @@ static void
 http_callback(xnet_unpacker_t *up, void *arg) {
 	int i;
 	xnet_httprequest_t *req = (xnet_httprequest_t *)arg;
-printf("http callback:\n");
+printf("http callback state[%d]:\n", req->code);
 printf("method:%s\nurl:%s\nversion:%s\n",
 	xnet_string_get_c_str(&req->method),
 	xnet_string_get_c_str(&req->url),
