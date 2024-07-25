@@ -19,11 +19,10 @@
 * socket数据包多发优化，共用一个数据包 *
 * pack/unpack机制 *
 * 异步日志支持开关 *
+* 优化socket slots 占用内存过大问题 *
 
 ## todo list
 
-* 优化socket slots 占用内存过大问题 *
-* log线程优化 *
 * 优化排版 *
 
 ## log
@@ -100,3 +99,6 @@ server初始化配置、代码优化完善
 
 6.10
 1.完成sizebuffer/linebuffer的pack/unpack
+
+7.25
+1.timeheap优化

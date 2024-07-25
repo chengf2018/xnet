@@ -345,7 +345,7 @@ xnet_error(xnet_context_t *ctx, char *msg, ...) {
     char tmp[LOG_MESSAGE_SIZE];
     va_list ap;
     int len, max_size;
-    char *data;
+    char *data = NULL;
 
     va_start(ap, msg);
     len = xnet_vsnprintf(tmp, sizeof(tmp), msg, ap);

@@ -12,49 +12,37 @@ reserve(xnet_timeheap_t *th) {
 }
 
 static void
-swap(xnet_timeinfo_t *heap, int a, int b) {
-	xnet_timeinfo_t temp = heap[a];
-	heap[a] = heap[b];
-	heap[b] = temp;
-}
-
-static void
-shift_up(xnet_timeheap_t *th) {
+shift_up(xnet_timeheap_t *th, xnet_timeinfo_t *ti) {
 	xnet_timeinfo_t *heap = th->heap;
-	xnet_timeinfo_t *p, *cur;
 	int n = th->n;
 	int parent = n / 2;
 
 	while (parent > 0) {
-		p = &heap[parent];
-		cur = &heap[n];
-		if (cur->expire < p->expire) {
-			swap(heap, parent, n);
-		} else {
-			break;
-		}
-		n = parent;
-		parent = parent / 2;
+		if (ti->expire < heap[parent].expire) {
+			heap[n] = heap[parent];
+			n = parent;
+			parent /= 2;
+		} else { break; }
 	}
+	heap[n] = *ti;
 }
 
 static void
 shift_down(xnet_timeheap_t *th) {
-	int l, r, p, s;
+	int l, r, s;
+	int p = 1;
 	xnet_timeinfo_t *heap = th->heap;
-	p = 1;
-	heap[1] = heap[th->n];
-	th->n --;
-	while (p < th->n) {
-		s = l = p * 2;
-		if (l > th->n) break;
+	xnet_timeinfo_t ti = heap[th->n--];
+
+	while ((l = p * 2) <= th->n) {
 		r = l + 1;
-		if (r <= th->n && heap[r].expire < heap[l].expire)
-			s = r;
-		if (heap[s].expire >= heap[p].expire) break;
-		swap(heap, p, s);
-		p = s;
+		s = (r <= th->n && heap[r].expire < heap[l].expire) ? r : l;
+		if (heap[s].expire < ti.expire) {
+			heap[p] = heap[s];
+			p = s;
+		} else { break; }
 	}
+	heap[p] = ti;
 }
 
 void
@@ -75,8 +63,8 @@ xnet_timeheap_release(xnet_timeheap_t *th) {
 void
 xnet_timeheap_push(xnet_timeheap_t *th, xnet_timeinfo_t *timeinfo) {
 	reserve(th);
-	th->heap[++th->n] = *timeinfo;
-	shift_up(th);
+	++th->n;
+	shift_up(th, timeinfo);
 }
 
 int
