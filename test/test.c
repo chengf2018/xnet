@@ -4,13 +4,19 @@
 #include <time.h>
 #include <assert.h>
 
+#ifdef _WIN32
+#define TIME_FORMAT "%I64u"
+#else
+#define TIME_FORMAT "%lu"
+#endif
+
 static void
 dump_timheap(xnet_timeheap_t *th) {
 	int i;
 	xnet_timeinfo_t *heap = th->heap;
 	printf("dump heap:[");
 	for (i=1; i<=th->n; i++) {
-		printf("{%d,%I64d}", heap[i].id, heap[i].expire);
+		printf("{%d,"TIME_FORMAT"}", heap[i].id, heap[i].expire);
 	}
 	printf("] n:%d, size:%d\n", th->n, th->size);
 }
@@ -33,7 +39,7 @@ main(int argc, char** argv) {
 	}
 	for (i=0; i<64; i++) {
 		xnet_timeheap_pop(&th, &ti);
-		printf("pop:[%d,%I64d]\n", ti.id, ti.expire);
+		printf("pop:[%d,"TIME_FORMAT"]\n", ti.id, ti.expire);
 		dump_timheap(&th);
 		if (last_pop != -1){
 			assert(last_pop <= ti.expire);
@@ -63,7 +69,7 @@ main(int argc, char** argv) {
 	printf("parse log_path succ:[%d]\n", succ);
 	succ = xnet_get_field2b(&config, "enable_gm", &cfg_enable_gm);
 	printf("parse enable_gm succ:[%d]\n", succ);
-	xnet_release_config(&config);
+	
 	printf("thread:[%d], port:[%d], log_path:[%s], enable_gm[%d]\n", cfg_thread,
 		cfg_port, cfg_log_path, cfg_enable_gm);
 	//test case, see "test.config"
@@ -71,7 +77,7 @@ main(int argc, char** argv) {
 	assert(cfg_port == 8888);
 	assert(strcmp(cfg_log_path, "./run.log") == 0);
 	assert(cfg_enable_gm == true);
-
+	xnet_release_config(&config);
 	printf("test config parse finished\n");
 
 

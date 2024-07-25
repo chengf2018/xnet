@@ -5,9 +5,9 @@
 #define XNET_EINTR EINTR
 
 #if (EAGAIN != EWOULDBLOCK)
-	#define XNET_HAVR_WOULDBLOCK(err) ((err) == EWOULDBLOCK || (err) == EAGAIN)
+	#define XNET_HAVE_WOULDBLOCK(err) ((err) == EWOULDBLOCK || (err) == EAGAIN)
 #else
-	#define XNET_HAVR_WOULDBLOCK(err) ((err) == EWOULDBLOCK)
+	#define XNET_HAVE_WOULDBLOCK(err) ((err) == EWOULDBLOCK)
 #endif
 
 static int

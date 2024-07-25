@@ -2,7 +2,7 @@
 #define _SOCKET_WIN_H_
 
 #define XNET_EINTR WSAEINTR
-#define XNET_HAVR_WOULDBLOCK(err) (err == WSAEWOULDBLOCK)
+#define XNET_HAVE_WOULDBLOCK(err) (err == WSAEWOULDBLOCK)
 
 //windows下没有pipe函数，模拟实现一个
 static int

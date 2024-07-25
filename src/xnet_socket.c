@@ -598,7 +598,7 @@ xnet_recv_data(xnet_poll_t *poll, xnet_socket_t *s, char **out_data) {
         free(buffer);
         err = get_last_error();
 
-        if (!XNET_HAVR_WOULDBLOCK(err) && err != XNET_EINTR) {
+        if (!XNET_HAVE_WOULDBLOCK(err) && err != XNET_EINTR) {
             printf("xnet_recv_data error: %d\n", err);
             return -1;
         }
@@ -662,7 +662,7 @@ send_tcp_data(xnet_poll_t *poll, xnet_socket_t *s) {
             if (n < 0) {
                 err = get_last_error();
                 if (err == XNET_EINTR) continue;
-                if (XNET_HAVR_WOULDBLOCK(err)) return -1;
+                if (XNET_HAVE_WOULDBLOCK(err)) return -1;
                 xnet_enable_write(poll, s, false);
                 return -1;
             }
@@ -705,7 +705,7 @@ send_udp_data(xnet_poll_t *poll, xnet_socket_t *s) {
 
         if (n < 0) {
             err = get_last_error();
-            if (err == XNET_EINTR || XNET_HAVR_WOULDBLOCK(err)) return -1;
+            if (err == XNET_EINTR || XNET_HAVE_WOULDBLOCK(err)) return -1;
             
             //drop it, save other package to try for next time.
             s->wb_size -= udp_wb->wb.sz;
