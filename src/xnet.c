@@ -595,6 +595,7 @@ xnet_dispatch_loop(xnet_context_t *ctx) {
         while (has_cmd(ctx)) {
             ret = ctrl_cmd(ctx);
             if (ret == 0) {
+                ctx->to_quit = true;
                 printf("exit loop\n");
                 break;
             }
@@ -608,7 +609,8 @@ xnet_dispatch_loop(xnet_context_t *ctx) {
             assert(ti.expire > ctx->nowtime);
             timeout = (int)(ti.expire - ctx->nowtime);
         } else {
-            timeout = -1;
+            if (ctx->to_quit) timeout = 0;
+            else timeout = -1;
         }
 
         ret = xnet_poll_wait(poll, timeout);

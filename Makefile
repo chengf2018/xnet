@@ -4,6 +4,8 @@ BASE_SRC_C = src/xnet.c src/xnet_socket.c src/xnet_timeheap.c \
 		src/xnet_util.c src/malloc_ref.c src/xnet_packer.c \
 		src/xnet_string.c
 SUFFIX=.exe
+LUA_INC ?= 3rd/lua
+LUA_STATICLIB := 3rd/lua/liblua.a
 
 win : CFLAGS += -lws2_32
 win : all
@@ -14,7 +16,7 @@ alltest = test$(SUFFIX) test_packer$(SUFFIX) test_udp_client$(SUFFIX) \
 
 allexample = http_server$(SUFFIX) control_server$(SUFFIX)
 
-all : $(allexample) $(alltest)
+all : $(allexample) $(alltest) xnet$(SUFFIX)
 
 #test
 
@@ -35,6 +37,10 @@ test$(SUFFIX) : test/test.c src/xnet_timeheap.c src/xnet_config.c src/xnet_util.
 
 test_packer$(SUFFIX) : test/test_packer.c src/xnet_packer.c src/xnet_string.c
 	$(CC) -o $@ $^ $(CFLAGS)
+
+#main
+xnet$(SUFFIX) : $(BASE_SRC_C) src/xnet_main.c $(LUA_STATICLIB)
+	$(CC) -o $@ $^ $(CFLAGS) -I$(LUA_INC) -lm
 
 #example
 
