@@ -568,14 +568,19 @@ xnet_clear_http_rsp(xnet_httpresponse_t *rsp) {
 
 static uint32_t
 read_size(char header[BUFFER_HEADER_SIZE]) {
-	uint32_t sz = 0;
-	memcpy(&sz, header, BUFFER_HEADER_SIZE);//小端序
+	uint32_t sz =   (header[0])
+				  | (header[1] << 8)
+				  | (header[2] << 16)
+				  | (header[3] << 24);
 	return sz;
 }
 
 static void
 write_size(uint32_t sz, char *buffer) {
-	memcpy(buffer, &sz, BUFFER_HEADER_SIZE);
+	buffer[0] = sz & 0xFF;
+	buffer[1] = (sz >> 8) & 0xFF;
+	buffer[2] = (sz >> 16) & 0xFF;
+	buffer[3] = (sz >> 24) & 0xFF;
 }
 
 uint32_t
