@@ -26,7 +26,11 @@ void xnet_register_connecter(xnet_context_t *ctx, xnet_connect_func_t connect_fu
 	xnet_error_func_t error_func, xnet_recv_func_t recv_func);
 void xnet_register_timeout(xnet_context_t *ctx, xnet_timeout_func_t timeout_func);
 void xnet_register_command(xnet_context_t *ctx, xnet_command_func_t command_func);
-int xnet_dispatch_loop(xnet_context_t *ctx);
+void xnet_register_event(xnet_context_t *ctx, xnet_listen_func_t listen_func, \
+    xnet_error_func_t error_func, xnet_recv_func_t recv_func,                 \
+    xnet_connect_func_t connect_func, xnet_timeout_func_t timeout_func,       \
+    xnet_command_func_t command_func);
+void xnet_dispatch_loop(xnet_context_t *ctx);
 
 char *xnet_send_buffer_malloc(size_t size);
 //if buffer not used for sending, this is way to free

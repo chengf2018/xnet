@@ -31,6 +31,8 @@ typedef struct xnet_context_t {
 	xnet_connect_func_t connect_func;
 	xnet_timeout_func_t timeout_func;
 	xnet_command_func_t command_func;
+
+	void *user_ptr;
 } xnet_context_t;
 
 typedef struct {

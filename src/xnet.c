@@ -397,6 +397,19 @@ xnet_register_connecter(xnet_context_t *ctx, xnet_connect_func_t connect_func, \
 }
 
 void
+xnet_register_event(xnet_context_t *ctx, xnet_listen_func_t listen_func, \
+    xnet_error_func_t error_func, xnet_recv_func_t recv_func,            \
+    xnet_connect_func_t connect_func, xnet_timeout_func_t timeout_func,  \
+    xnet_command_func_t command_func) {
+    ctx->listen_func = listen_func;
+    ctx->error_func = error_func;
+    ctx->recv_func = recv_func;
+    ctx->connect_func = connect_func;
+    ctx->timeout_func = timeout_func;
+    ctx->command_func = command_func;
+}
+
+void
 xnet_register_timeout(xnet_context_t *ctx, xnet_timeout_func_t timeout_func) {
     ctx->timeout_func = timeout_func;
 }
@@ -466,6 +479,7 @@ xnet_tcp_send_buffer(xnet_context_t *ctx, xnet_socket_t *s, const char *buffer, 
 
 void
 xnet_close_socket(xnet_context_t *ctx, xnet_socket_t *s) {
+    if (s->type == SOCKET_TYPE_INVALID || s->closing) return;
     ctx->error_func(ctx, s, 0);
     //主动关闭连接
     if (wb_list_empty(s)) {
@@ -581,7 +595,7 @@ deal_with_udp_message(xnet_context_t *ctx, xnet_socket_t *s) {
     }
 }
 
-int
+void
 xnet_dispatch_loop(xnet_context_t *ctx) {
     int ret, i;
     xnet_poll_event_t *poll_event = &ctx->poll.poll_event;
@@ -668,8 +682,6 @@ xnet_dispatch_loop(xnet_context_t *ctx) {
             }
         }
     }
-
-    return 0;
 }
 
 //只能在主线程使用
