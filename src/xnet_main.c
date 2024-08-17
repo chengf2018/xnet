@@ -50,7 +50,7 @@ listen_func(xnet_context_t *ctx, xnet_socket_t *s, xnet_socket_t *ns, xnet_addr_
 	if (lua_getfield(L, -1, "listen") == LUA_TFUNCTION) {
 		lua_pushlightuserdata(L, s);
 		lua_pushlightuserdata(L, ns);
-		lua_pushstring(L, addr_str);
+		lua_pushlightuserdata(L, addr_info);
 		if (lua_pcall(L, 3, 0, 0) != LUA_OK) {
 			xnet_error(ctx, "call listen fail:%s", lua_tostring(L, -1));
 			return;
@@ -91,9 +91,7 @@ recv_func(xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int size, xnet_ad
 		lua_pushlightuserdata(L, s);
 		lua_pushlstring(L, buffer, size);
 		lua_pushinteger(L, size);
-		char addr_str[64] = {0};
-		xnet_addrtoa(addr_info, addr_str);
-		lua_pushstring(L, addr_str);
+		lua_pushlightuserdata(L, addr_info);
 		if (lua_pcall(L, 4, 0, 0) != LUA_OK) {
 			xnet_error(ctx, "call recv error:%s", lua_tostring(L, -1));
 			return 0;
@@ -123,14 +121,42 @@ timeout_func(xnet_context_t *ctx, int id) {
 
 static int
 command_func(xnet_context_t *ctx, xnet_context_t *source, int command, void *data, int sz) {
-
+	lua_State *L = ctx->user_ptr;
+	int ftype = lua_getfield(L, LUA_REGISTRYINDEX, "reg_funcs");
+	if (ftype != LUA_TTABLE) {
+		xnet_error(ctx, "reg_funcs is not a table %d", ftype);
+		return 0;
+	}
+	if (lua_getfield(L, -1, "comand") == LUA_TFUNCTION) {
+		lua_pushlightuserdata(L, source);
+		lua_pushinteger(L, command);
+		lua_pushlstring(L, data, sz);
+		lua_pushinteger(L, sz);
+		if (lua_pcall(L, 4, 0, 0) != LUA_OK) {
+			xnet_error(ctx, "call command error:%s", lua_tostring(L, -1));
+			return 0;
+		}
+	}
     return 0;//返回0，由xnet释放data
 }
 
 static void
 connect_func(struct xnet_context_t *ctx, xnet_socket_t *s, int error) {
 	xnet_error(ctx, "-----socket [%d] connected. error:[%d]", s->id, error);
-    
+	lua_State *L = ctx->user_ptr;
+	int ftype = lua_getfield(L, LUA_REGISTRYINDEX, "reg_funcs");
+	if (ftype != LUA_TTABLE) {
+		xnet_error(ctx, "reg_funcs is not a table %d", ftype);
+		return;
+	}    
+	if (lua_getfield(L, -1, "connected") == LUA_TFUNCTION) {
+		lua_pushlightuserdata(L, s);
+		lua_pushinteger(L, error);
+		if (lua_pcall(L, 2, 0, 0) != LUA_OK) {
+			xnet_error(ctx, "call connected error:%s", lua_tostring(L, -1));
+			return;
+		}
+	}
 }
 
 static void

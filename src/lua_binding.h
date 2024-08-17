@@ -206,6 +206,18 @@ _register(lua_State *L) {
 	return 0;
 }
 
+static int
+_xnet_addrtoa(lua_State *L) {
+	if (!lua_islightuserdata(L, 1)) {
+		luaL_error(L, "error addr type");
+	}
+	char str[64] = {0};
+	xnet_addr_t *addr = lua_touserdata(L, 1); 
+	xnet_addrtoa(addr, str);
+	lua_pushstring(L, str);
+	return 1;
+}
+
 static void
 xnet_bind_lua(lua_State *L, xnet_context_t *ctx) {
 	ctx->user_ptr = L;
@@ -258,6 +270,18 @@ xnet_bind_lua(lua_State *L, xnet_context_t *ctx) {
 	//register
 	lua_pushcfunction(L, _register);
 	lua_setfield(L, -2, "register");
+
+	//addrtoa
+	lua_pushcfunction(L, _xnet_addrtoa);
+	lua_setfield(L, -2, "addrtoa");
+
+	//protocol type
+	lua_pushinteger(L, SOCKET_PROTOCOL_TCP);
+	lua_setfield(L, -2, "PROTOCOL_TCP");
+	lua_pushinteger(L, SOCKET_PROTOCOL_UDP);
+	lua_setfield(L, -2, "PROTOCOL_UDP");
+	lua_pushinteger(L, SOCKET_PROTOCOL_UDP_IPV6);
+	lua_setfield(L, -2, "PROTOCOL_UDP_IPV6");
 
 	lua_setglobal(L, "xnet");
 }

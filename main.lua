@@ -7,13 +7,13 @@ function Start()
 	xnet.add_timer(1, 1000);
 	xnet.register({
 		listen = function(s, ns, addr)
-			print("----lua: new connection", s, ns, addr)
+			print("----lua: new connection", s, ns, addr, xnet.addrtoa(addr))
 		end,
 		error = function(s, what)
 			print("----lua: error", s, what)
 		end,
 		recv = function(s, buffer, sz, addr)
-			print("----lua: recv", s, sz, addr, buffer)
+			print("----lua: recv", s, sz, addr, buffer, xnet.addrtoa(addr))
 		end,
 		timeout = function(id)
 			print("----lua:timeout", id)
