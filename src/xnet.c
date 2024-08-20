@@ -480,7 +480,7 @@ xnet_tcp_send_buffer(xnet_context_t *ctx, xnet_socket_t *s, const char *buffer, 
 void
 xnet_close_socket(xnet_context_t *ctx, xnet_socket_t *s) {
     if (s->type == SOCKET_TYPE_INVALID || s->closing) return;
-    ctx->error_func(ctx, s, 0);
+
     //主动关闭连接
     if (wb_list_empty(s)) {
         xnet_poll_closefd(&ctx->poll, s);
@@ -565,7 +565,7 @@ deal_with_connected(xnet_context_t *ctx, xnet_socket_t *s) {
     ctx->connect_func(ctx, s, 0);
 }
 
-static void
+static int
 deal_with_tcp_message(xnet_context_t *ctx, xnet_socket_t *s) {
     char *buffer;
     int n;
@@ -576,12 +576,13 @@ deal_with_tcp_message(xnet_context_t *ctx, xnet_socket_t *s) {
             free(buffer);
         buffer = NULL;
     } else if (n < 0) {
-        ctx->error_func(ctx, s, 0);
         xnet_poll_closefd(&ctx->poll, s);
+        return -1;
     }
+    return 0;
 }
 
-static void
+static int
 deal_with_udp_message(xnet_context_t *ctx, xnet_socket_t *s) {
     int n;
     xnet_addr_t addr_info;
@@ -590,9 +591,18 @@ deal_with_udp_message(xnet_context_t *ctx, xnet_socket_t *s) {
     if (n >= 0) {
         ctx->recv_func(ctx, s, ctx->poll.udp_buffer, n, &addr_info);
     } else {
-        ctx->error_func(ctx, s, 0);
         xnet_poll_closefd(&ctx->poll, s);
+        return -1;
     }
+    return 0;
+}
+
+static int
+deal_with_message(xnet_context_t *ctx, xnet_socket_t *s) {
+    if (s->protocol == SOCKET_PROTOCOL_TCP)
+        return deal_with_tcp_message(ctx, s);
+    else
+        return deal_with_udp_message(ctx, s);
 }
 
 void
@@ -652,17 +662,21 @@ xnet_dispatch_loop(xnet_context_t *ctx) {
                 if (poll_event->read[i]) {
                     //输入缓存区有可读数据；处于监听状态，有连接到达；出错
                     //xnet_error(ctx, "read event[%d]", s->id);
-                    if (s->protocol == SOCKET_PROTOCOL_TCP)
-                        deal_with_tcp_message(ctx, s);
-                    else
-                        deal_with_udp_message(ctx, s);
+                    deal_with_message(ctx, s);
+                    if (s->type == SOCKET_TYPE_INVALID) {
+                        ctx->error_func(ctx, s, 0);
+                        continue;
+                    }
                 }
 
                 if (poll_event->write[i]) {
                     //输出缓冲区可写；连接成功
                     //发送缓冲列表内的数据
                     //xnet_error(ctx, "write event[%d]", s->id);
-                    xnet_send_data(&ctx->poll, s);
+                    if (xnet_send_data(&ctx->poll, s) == -2) { //-2: raw close
+                        ctx->error_func(ctx, s, 0);
+                        continue;
+                    }
                 }
 
                 if (poll_event->error[i]) {

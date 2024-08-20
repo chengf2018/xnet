@@ -682,6 +682,7 @@ send_tcp_data(xnet_poll_t *poll, xnet_socket_t *s) {
     wb_list->tail = NULL;
     if (s->closing) {
         xnet_poll_closefd(poll, s);
+        return -2;//raw close
     } else {
         //sending is over,disable write event
         xnet_enable_write(poll, s, false);
@@ -721,6 +722,7 @@ send_udp_data(xnet_poll_t *poll, xnet_socket_t *s) {
 
     if (s->closing) {
         xnet_poll_closefd(poll, s);
+        return -2;//raw close
     } else {
         //sending is over,disable write event
         xnet_enable_write(poll, s, false);
