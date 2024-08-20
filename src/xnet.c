@@ -673,7 +673,8 @@ xnet_dispatch_loop(xnet_context_t *ctx) {
                     //输出缓冲区可写；连接成功
                     //发送缓冲列表内的数据
                     //xnet_error(ctx, "write event[%d]", s->id);
-                    if (xnet_send_data(&ctx->poll, s) == -2) { //-2: raw close
+                    xnet_send_data(&ctx->poll, s);
+                    if (s->type == SOCKET_TYPE_INVALID) {
                         ctx->error_func(ctx, s, 0);
                         continue;
                     }
@@ -697,12 +698,6 @@ xnet_dispatch_loop(xnet_context_t *ctx) {
         }
     }
 }
-
-//只能在主线程使用
-
-
-
-
 
 
 int
