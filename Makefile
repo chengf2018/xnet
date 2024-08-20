@@ -39,8 +39,8 @@ test_packer$(SUFFIX) : test/test_packer.c src/xnet_packer.c src/xnet_string.c
 	$(CC) -o $@ $^ $(CFLAGS)
 
 #main
-xnet$(SUFFIX) : $(BASE_SRC_C) src/xnet_main.c $(LUA_STATICLIB)
-	$(CC) -o $@ $^ $(CFLAGS) -I$(LUA_INC) -lm
+xnet$(SUFFIX) : $(BASE_SRC_C) src/xnet_main.c src/xnet_config.c $(LUA_STATICLIB)
+	$(CC) -o $@ $^ $(CFLAGS) -I$(LUA_INC) -lm -ldl
 
 #example
 

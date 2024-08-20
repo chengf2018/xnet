@@ -1,3 +1,4 @@
 *.exe
 *.a
 *.lib
+*.log

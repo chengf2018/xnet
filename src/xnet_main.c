@@ -4,6 +4,12 @@
 #include <lauxlib.h>
 #include <lualib.h>
 #include "lua_binding.h"
+#include "xnet_config.h"
+
+typedef struct {
+    xnet_init_config_t init;
+    char *luabooter;
+} server_config_t;
 
 static void
 call_lua_start(lua_State *L, xnet_context_t *ctx) {
@@ -165,15 +171,60 @@ bind_event(xnet_context_t *ctx) {
     					connect_func, timeout_func, command_func);
 }
 
+static void
+start_init_config(server_config_t *server_config, const char *config_name) {
+	xnet_config_t config;
+	char *value = NULL;
+	//default value
+	server_config->init.log_path = NULL;
+	server_config->init.disable_thread = false;
+	server_config->luabooter = NULL;
+	
+	if (!config_name) return;
 
+	xnet_config_init(&config);
+	if (xnet_parse_config(&config, config_name) != 0) {
+		xnet_release_config(&config);
+		printf("parse server config %s error\n", config_name);
+		exit(1);
+	}
+	
+	if (xnet_get_field2s(&config, "log_path", &value))
+		server_config->init.log_path = strdup(value);
+
+	xnet_get_field2b(&config, "disable_log_thread", &server_config->init.disable_thread);
+
+	if (xnet_get_field2s(&config, "luabooter", &value))
+		server_config->luabooter = strdup(value);
+
+	xnet_release_config(&config);
+}
+
+static void
+release_config(server_config_t *server_config) {
+	if (server_config->init.log_path)
+		free(server_config->init.log_path);
+	if (server_config->luabooter)
+		free(server_config->luabooter);
+}
 
 int
 main(int argc, char **argv) {
 	lua_State *L = NULL;
 	xnet_context_t *ctx = NULL;
+	server_config_t server_config;
+	const char *config_name = NULL;
 	int ret;
 
-	ret = xnet_init(NULL);
+	if (argc < 2) {
+		printf("must supply a config file name\n");
+		exit(1);
+	}
+
+	config_name = argv[1];
+	start_init_config(&server_config, config_name);
+
+	ret = xnet_init((xnet_init_config_t*)&server_config);
 	if (ret != 0) {
 		printf("xnet init error!\n");
 		goto error;
@@ -191,25 +242,30 @@ main(int argc, char **argv) {
 	}
 	luaL_openlibs(L);
 	//lua state must have "Start", "Init" and "Stop" function
-	ret = luaL_dofile(L, "main.lua");
+	ret = luaL_dofile(L, server_config.luabooter ? server_config.luabooter : "main.lua");
 	if (ret != LUA_OK) {
 		xnet_error(ctx, "lua error:%s", lua_tostring(L, -1));
 		goto error;
 	}
+
 	xnet_bind_lua(L, ctx);
 	printf("start lua function\n");
 	call_lua_start(L, ctx);
 	call_lua_init(L, ctx);
+
 	xnet_dispatch_loop(ctx);
+
 	call_lua_stop(L, ctx);
 
 	lua_close(L);
 	xnet_destroy_context(ctx);
 	xnet_deinit();
+	release_config(&server_config);
 	return 0;
 error:
 	if (L) lua_close(L);
 	if (ctx) xnet_destroy_context(ctx);
 	xnet_deinit();
+	release_config(&server_config);
 	return 1;
 }
