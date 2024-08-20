@@ -3,3 +3,5 @@
 *.lib
 *.log
 *.o
+3rd/lua/src/lua
+3rd/lua/src/luac
