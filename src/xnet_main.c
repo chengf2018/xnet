@@ -108,7 +108,7 @@ recv_func(xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int size, xnet_ad
 		return 0;
 	}
 
-	if (lua_getfield(L, -1, "recv") != LUA_OK) {
+	if (lua_getfield(L, -1, "recv") == LUA_TFUNCTION) {
 		lua_pushlightuserdata(L, s);
 		lua_pushinteger(L, 0);
 		lua_pushlstring(L, buffer, size);
