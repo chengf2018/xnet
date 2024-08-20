@@ -1,4 +1,5 @@
 
+local socket_list = { }
 
 function Start()
 	print("lua start!")
@@ -8,16 +9,20 @@ function Start()
 	xnet.register({
 		listen = function(s, ns, addr)
 			print("----lua: new connection", s, ns, addr, xnet.addrtoa(addr))
+			socket_list[ns] = ns
+			--xnet.register_packer(ns, xnet.PACKER_TYPE_LINE)
+			xnet.register_packer(ns, nil)
 		end,
 		error = function(s, what)
 			print("----lua: error", s, what)
+			socket_list[ns] = nil
 		end,
-		recv = function(s, buffer, sz, addr)
-			print("----lua: recv", s, sz, addr, buffer, xnet.addrtoa(addr))
+		recv = function(s, pkg_type, pkg, sz)
+			print("----lua: recv", s, pkg_type, pkg, sz)
 		end,
 		timeout = function(id)
 			print("----lua:timeout", id)
-			xnet.add_timer(1, 1000);
+			--xnet.add_timer(1, 1000);
 		end,
 		command = function(source, command, data, sz)
 			print("----lua:command", source, command, sz)
@@ -25,6 +30,7 @@ function Start()
 		connected = function(s, err)
 			print("----lua:connected", s, err)
 		end,
+
 	})
 end
 

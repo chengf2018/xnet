@@ -6,6 +6,7 @@
 #include "lua_binding.h"
 #include "xnet_config.h"
 
+
 typedef struct {
     xnet_init_config_t init;
     char *luabooter;
@@ -85,25 +86,39 @@ error_func(xnet_context_t *ctx, xnet_socket_t *s, short what) {
 	}
 }
 
+static void
+do_unpack_recv(xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int size, xnet_addr_t *addr_info) {
+	if (xnet_unpacker_recv(s->unpacker, buffer, size) != 0) {
+		xnet_error(ctx, "unpacker recv error");
+	}
+}
+
 static int
 recv_func(xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int size, xnet_addr_t *addr_info) {
+	if (s->unpacker != NULL) {
+		do_unpack_recv(ctx, s, buffer, size, addr_info);
+		return 0;
+	}
+
+	//normal forward
 	lua_State *L = ctx->user_ptr;
 	int ftype = lua_getfield(L, LUA_REGISTRYINDEX, "reg_funcs");
 	if (ftype != LUA_TTABLE) {
 		xnet_error(ctx, "reg_funcs is not a table %d", ftype);
 		return 0;
-	} 
+	}
+
 	if (lua_getfield(L, -1, "recv") != LUA_OK) {
 		lua_pushlightuserdata(L, s);
+		lua_pushinteger(L, 0);
 		lua_pushlstring(L, buffer, size);
 		lua_pushinteger(L, size);
-		lua_pushlightuserdata(L, addr_info);
 		if (lua_pcall(L, 4, 0, 0) != LUA_OK) {
 			xnet_error(ctx, "call recv error:%s", lua_tostring(L, -1));
 			return 0;
 		}
 	}
-    return 0;//返回0,由xnet释放
+    return 0;//return 0, buffer free by xnet
 }
 
 static void
