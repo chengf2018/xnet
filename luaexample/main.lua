@@ -3,7 +3,7 @@ local socket_list = { }
 
 function Start()
 	print("lua start!")
-	local rc, sock = xnet.tcp_listen("127.0.0.1", 9090, 5);
+	local rc, sock = xnet.tcp_listen("0.0.0.0", 9090, 5);
 	print("lua tcp_listen", rc, sock)
 	xnet.add_timer(1, 1000);
 	xnet.register({

@@ -216,7 +216,7 @@ static void
 http_callback(xnet_unpacker_t *up, void *arg) {
 	xnet_httprequest_t *req = (xnet_httprequest_t *) arg;
 	xnet_context_t *ctx = (xnet_context_t *)up->user_ptr;
-	int sock_id = (int)up->user_arg;
+	int sock_id = (long)up->user_arg;
 	xnet_socket_t *s = xnet_get_socket(ctx, sock_id);
 	lua_State *L = ctx->user_ptr;
 
@@ -267,7 +267,7 @@ static void
 sizebuffer_callback(xnet_unpacker_t *up, void *arg) {
 	xnet_sizebuffer_t *sb = (xnet_sizebuffer_t *)arg;
 	xnet_context_t *ctx = (xnet_context_t *)up->user_ptr;
-	int sock_id = (int)up->user_arg;
+	int sock_id = (long)up->user_arg;
 	xnet_socket_t *s = xnet_get_socket(ctx, sock_id);
 	lua_State *L = ctx->user_ptr;
 
@@ -295,7 +295,7 @@ static void
 linebuffer_callback(xnet_unpacker_t *up, void *arg) {
 	xnet_linebuffer_t *lb = (xnet_linebuffer_t *)arg;
 	xnet_context_t *ctx = (xnet_context_t *)up->user_ptr;
-	int sock_id = (int)up->user_arg;
+	int sock_id = (long)up->user_arg;
 	lua_State *L = ctx->user_ptr;
 	xnet_socket_t *s = xnet_get_socket(ctx, sock_id);
 
@@ -353,7 +353,7 @@ _register_packer(lua_State *L) {
 		luaL_error(L, "register pack type error");
 	}
 	up->user_ptr = ctx;
-	up->user_arg = (void*)sock_id;
+	up->user_arg = (void*)(long)sock_id;
 	s->unpacker = up;	
 
 	return 0;

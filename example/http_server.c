@@ -43,7 +43,7 @@ static void
 http_request(xnet_unpacker_t *up, void *arg) {
 	xnet_httprequest_t *req = (xnet_httprequest_t *)arg;
 	xnet_context_t *ctx = (xnet_context_t *)up->user_ptr;
-	int sock_id = (int)up->user_arg;
+	int sock_id = (long)up->user_arg;
 	xnet_httpresponse_t rsp = {};
 	int i;
 
@@ -77,7 +77,7 @@ listen_func(xnet_context_t *ctx, int sock_id, int acc_sock_id) {
 		return;
 	}
 	up->user_ptr = ctx;
-	up->user_arg = (void*)acc_sock_id;
+	up->user_arg = (void*)(long)acc_sock_id;
 	ns->unpacker = up;
 }
 
