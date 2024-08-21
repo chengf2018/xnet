@@ -133,46 +133,29 @@ send_cmd(xnet_context_t *ctx, xnet_cmdreq_t *req, int type, int len) {
 
 static void
 cmd_listen(xnet_context_t *ctx, xnet_cmdreq_listen_t *req) {
-    xnet_socket_t *s = NULL;
-    int ret;
-
-    if (xnet_listen_tcp_socket(&ctx->poll, req->host, req->port, req->backlog, &s) != 0)
-        ret = -1;
-    else
-        ret = s->id;
-
+    int ret = xnet_listen_tcp_socket(&ctx->poll, req->host, req->port, req->backlog);
     if (req->source && req->back_command)
         xnet_send_command(req->source, ctx, req->back_command, NULL, ret);
 }
 
 static void
 cmd_close(xnet_context_t *ctx, xnet_cmdreq_close_t *req) {
-    xnet_socket_t *s = &ctx->poll.slots[req->id];
-    if (s->type == SOCKET_TYPE_INVALID || s->closing)
-        return;
-
-    xnet_close_socket(ctx, s);
+    xnet_close_socket(ctx, req->id);
 }
 
 static void
 cmd_connect(xnet_context_t *ctx, xnet_cmdreq_connect_t *req) {
-    xnet_socket_t *s = NULL;
-    int ret;
-    if (xnet_connect_tcp_socket(&ctx->poll, req->host, req->port, &s) != 0) {
-        ret = -1;
-    } else {
-        ret = s->id;
-    }
+    int sock_id = -1;
+    xnet_connect_tcp_socket(&ctx->poll, req->host, req->port, &sock_id);
     if (req->source && req->back_command) {
-        //注意这里只是返回id，不一定就是已经连接成功
-        xnet_send_command(req->source, ctx, req->back_command, NULL, ret);
+        xnet_send_command(req->source, ctx, req->back_command, NULL, sock_id);
     }
 }
 
 static void
 cmd_send_tcp_pkg(xnet_context_t *ctx, xnet_cmdreq_sendtcp_t *req) {
-    xnet_socket_t *s = &ctx->poll.slots[req->id];
-    if (s->type == SOCKET_TYPE_INVALID || s->closing) {
+    xnet_socket_t *s = xnet_get_socket(ctx, req->id);
+    if (s == NULL || s->type == SOCKET_TYPE_INVALID || s->closing) {
         free(req->data);
         return;
     }
@@ -181,15 +164,14 @@ cmd_send_tcp_pkg(xnet_context_t *ctx, xnet_cmdreq_sendtcp_t *req) {
 
 static void
 cmd_broad_tcp_pkg(xnet_context_t *ctx, xnet_cmdreq_broadtcp_t *req) {
-    char *new_buffer;
-    xnet_socket_t *s;
-    int i, n;
-    n = *(req->ids);
-    new_buffer = mf_malloc(req->size);
+    int n = req->ids[0];
+    char *new_buffer = mf_malloc(req->size);
     memcpy(new_buffer, req->data, req->size);
-    for (i=1; i<=n; i++) {
-        s = &ctx->poll.slots[req->ids[i]];
-        if (s->type == SOCKET_TYPE_INVALID || s->closing) continue;
+
+    for (int i=1; i<=n; i++) {
+        xnet_socket_t *s = xnet_get_socket(ctx, req->ids[i]);
+        if (s == NULL || s->type == SOCKET_TYPE_INVALID || s->closing)
+            continue;
 
         mf_add_ref(new_buffer);
         append_send_buff(&ctx->poll, s, new_buffer, req->size, false);
@@ -200,8 +182,8 @@ cmd_broad_tcp_pkg(xnet_context_t *ctx, xnet_cmdreq_broadtcp_t *req) {
 
 static void
 cmd_send_udp_pkg(xnet_context_t *ctx, xnet_cmdreq_sendupd_t *req) {
-    xnet_socket_t *s = &ctx->poll.slots[req->id];
-    if (s->type == SOCKET_TYPE_INVALID || s->closing) {
+    xnet_socket_t *s = xnet_get_socket(ctx, req->id);
+    if (s == NULL || s->type == SOCKET_TYPE_INVALID || s->closing) {
         free(req->data);
         return;
     }
@@ -210,8 +192,8 @@ cmd_send_udp_pkg(xnet_context_t *ctx, xnet_cmdreq_sendupd_t *req) {
 
 static void
 cmd_sendto_udp_pkg(xnet_context_t *ctx, xnet_cmdreq_sendtoupd_t *req) {
-    xnet_socket_t *s = &ctx->poll.slots[req->id];
-    if (s->type == SOCKET_TYPE_INVALID || s->closing) {
+    xnet_socket_t *s = xnet_get_socket(ctx, req->id);
+    if (s == NULL || s->type == SOCKET_TYPE_INVALID || s->closing) {
         free(req->data);
         return;
     }
@@ -250,7 +232,7 @@ ctrl_cmd(xnet_context_t *ctx) {
 
     block_recv(fd, header, sizeof(header));
     type = header[0]; len = header[1];
-//printf("ctrl_cmd[%d, %d, %d]\n", type, len, ctx->id);
+
     if (len > 0) block_recv(fd, buffer, len);
 
     switch (type) {
@@ -428,14 +410,27 @@ xnet_add_timer(xnet_context_t *ctx, int id, int timeout) {
     return 0;
 }
 
-int
-xnet_tcp_listen(xnet_context_t *ctx, const char *host, int port, int backlog, xnet_socket_t **socket_out) {
-    return xnet_listen_tcp_socket(&ctx->poll, host, port, backlog, socket_out);
+xnet_socket_t *
+xnet_get_socket(xnet_context_t *ctx, int sock_id) {
+    if (sock_id < 0 || sock_id >= MAX_CLIENT_NUM)
+        return NULL;
+    return xnet_poll_get_socket(&ctx->poll, sock_id);
 }
 
 int
-xnet_tcp_connect(xnet_context_t *ctx, const char *host, int port, xnet_socket_t **socket_out) {
-    return xnet_connect_tcp_socket(&ctx->poll, host, port, socket_out);
+xnet_tcp_listen(xnet_context_t *ctx, const char *host, int port, int backlog) {
+    return xnet_listen_tcp_socket(&ctx->poll, host, port, backlog);
+}
+
+int
+xnet_tcp_connect(xnet_context_t *ctx, const char *host, int port) {
+    int sock;
+    int rc = xnet_connect_tcp_socket(&ctx->poll, host, port, &sock);
+    if (rc == -1)
+        return -1;
+    if (rc == 1)
+        ctx->connect_func(ctx, sock, 0);
+    return rc;
 }
 
 char *
@@ -449,9 +444,10 @@ xnet_send_buffer_free(char *ptr) {
 }
 
 void
-xnet_tcp_send_buffer_ref(xnet_context_t *ctx, xnet_socket_t *s, const char *buffer, int sz, bool raw) {
+xnet_tcp_send_buffer_ref(xnet_context_t *ctx, int sock_id, const char *buffer, int sz, bool raw) {
     char *send_buffer;
-    if (sz <= 0 || s->type == SOCKET_TYPE_INVALID || s->closing)
+    xnet_socket_t *s = xnet_get_socket(ctx, sock_id);
+    if (s == NULL || sz <= 0 || s->type == SOCKET_TYPE_INVALID || s->closing)
         return;
     if (raw) {
         send_buffer = (char*)buffer;
@@ -464,9 +460,10 @@ xnet_tcp_send_buffer_ref(xnet_context_t *ctx, xnet_socket_t *s, const char *buff
 }
 
 void
-xnet_tcp_send_buffer(xnet_context_t *ctx, xnet_socket_t *s, const char *buffer, int sz, bool raw) {
+xnet_tcp_send_buffer(xnet_context_t *ctx, int sock_id, const char *buffer, int sz, bool raw) {
     char *send_buffer;
-    if (sz <= 0 || s->type == SOCKET_TYPE_INVALID || s->closing)
+    xnet_socket_t *s = xnet_get_socket(ctx, sock_id);
+    if (s == NULL || sz <= 0 || s->type == SOCKET_TYPE_INVALID || s->closing)
         return;
     if (raw) {
         send_buffer = (char*)buffer;
@@ -478,8 +475,13 @@ xnet_tcp_send_buffer(xnet_context_t *ctx, xnet_socket_t *s, const char *buffer, 
 }
 
 void
-xnet_close_socket(xnet_context_t *ctx, xnet_socket_t *s) {
-    if (s->type == SOCKET_TYPE_INVALID || s->closing) return;
+xnet_close_socket(xnet_context_t *ctx, int sock_id) {
+    if (sock_id < 0 || sock_id >= MAX_CLIENT_NUM)
+        return;
+
+    xnet_socket_t *s = xnet_get_socket(ctx, sock_id);
+    if (s == NULL || s->type == SOCKET_TYPE_INVALID || s->closing)
+        return;
 
     //主动关闭连接
     if (wb_list_empty(s)) {
@@ -490,24 +492,27 @@ xnet_close_socket(xnet_context_t *ctx, xnet_socket_t *s) {
 }
 
 int
-xnet_udp_listen(xnet_context_t *ctx, const char *host, int port, xnet_socket_t **socket_out) {
-    return xnet_listen_udp_socket(&ctx->poll, host, port, socket_out);
+xnet_udp_listen(xnet_context_t *ctx, const char *host, int port) {
+    return xnet_listen_udp_socket(&ctx->poll, host, port);
 }
 
 int
-xnet_udp_create(xnet_context_t *ctx, int protocol, xnet_socket_t **socket_out) {
-    return xnet_create_udp_socket(&ctx->poll, protocol, socket_out);
+xnet_udp_create(xnet_context_t *ctx, int protocol) {
+    return xnet_create_udp_socket(&ctx->poll, protocol);
 }
 
 int
-xnet_udp_set_addr(xnet_context_t *ctx, xnet_socket_t *s, const char *host, int port) {
+xnet_udp_set_addr(xnet_context_t *ctx, int sock_id, const char *host, int port) {
+    xnet_socket_t *s = xnet_get_socket(ctx, sock_id);
+    if (s == NULL || sock_id < 0 || sock_id >= MAX_CLIENT_NUM) return -1;
     return xnet_set_udp_socket_addr(&ctx->poll, s, host, port);
 }
 
 void
-xnet_udp_sendto(xnet_context_t *ctx, xnet_socket_t *s, xnet_addr_t *recv_addr, const char *buffer, int sz, bool raw) {
+xnet_udp_sendto(xnet_context_t *ctx, int sock_id, xnet_addr_t *recv_addr, const char *buffer, int sz, bool raw) {
+    xnet_socket_t *s = xnet_get_socket(ctx, sock_id);
     char *send_buffer;
-    if (s->type == SOCKET_TYPE_INVALID || s->closing)
+    if (s == NULL || s->type == SOCKET_TYPE_INVALID || s->closing)
         return;
     if (raw) {
         send_buffer = (char*)buffer;
@@ -519,10 +524,12 @@ xnet_udp_sendto(xnet_context_t *ctx, xnet_socket_t *s, xnet_addr_t *recv_addr, c
 }
 
 void
-xnet_udp_sendto_ref(xnet_context_t *ctx, xnet_socket_t *s, xnet_addr_t *recv_addr, const char *buffer, int sz, bool raw) {
+xnet_udp_sendto_ref(xnet_context_t *ctx, int sock_id, xnet_addr_t *recv_addr, const char *buffer, int sz, bool raw) {
+    xnet_socket_t *s = xnet_get_socket(ctx, sock_id);
     char *send_buffer;
-    if (s->type == SOCKET_TYPE_INVALID || s->closing)
+    if (s == NULL || s->type == SOCKET_TYPE_INVALID || s->closing)
         return;
+
     if (raw) {
         send_buffer = (char*)buffer;
     } else {
@@ -534,13 +541,17 @@ xnet_udp_sendto_ref(xnet_context_t *ctx, xnet_socket_t *s, xnet_addr_t *recv_add
 }
 
 void
-xnet_udp_send_buffer(xnet_context_t *ctx, xnet_socket_t *s, const char *buffer, int sz, bool raw) {
-    xnet_udp_sendto(ctx, s, &s->addr_info, buffer, sz, raw);
+xnet_udp_send_buffer(xnet_context_t *ctx, int sock_id, const char *buffer, int sz, bool raw) {
+    xnet_socket_t *s = xnet_get_socket(ctx, sock_id);
+    if (s == NULL || s->type == SOCKET_TYPE_INVALID || s->closing) return;
+    xnet_udp_sendto(ctx, sock_id, &s->addr_info, buffer, sz, raw);
 }
 
 void
-xnet_udp_send_buffer_ref(xnet_context_t *ctx, xnet_socket_t *s, const char *buffer, int sz, bool raw) {
-    xnet_udp_sendto_ref(ctx, s, &s->addr_info, buffer, sz, raw);
+xnet_udp_send_buffer_ref(xnet_context_t *ctx, int sock_id, const char *buffer, int sz, bool raw) {
+    xnet_socket_t *s = xnet_get_socket(ctx, sock_id);
+    if (s == NULL || s->type == SOCKET_TYPE_INVALID || s->closing) return;
+    xnet_udp_sendto_ref(ctx, sock_id, &s->addr_info, buffer, sz, raw);
 }
 
 void
@@ -555,14 +566,14 @@ deal_with_connected(xnet_context_t *ctx, xnet_socket_t *s) {
     int code = get_sockopt(s->fd, SOL_SOCKET, SO_ERROR, &err, &len);  
     if (code < 0 || err) {
         err = code < 0 ? get_last_error() : err;
-        ctx->connect_func(ctx, s, err);
+        ctx->connect_func(ctx, s->id, err);
         xnet_poll_closefd(&ctx->poll, s);
         return;
     }
 
     s->type = SOCKET_TYPE_CONNECTED;
     xnet_enable_write(&ctx->poll, s, false);
-    ctx->connect_func(ctx, s, 0);
+    ctx->connect_func(ctx, s->id, 0);
 }
 
 static int
@@ -572,7 +583,7 @@ deal_with_tcp_message(xnet_context_t *ctx, xnet_socket_t *s) {
 
     n = xnet_recv_data(&ctx->poll, s, &buffer);
     if (n > 0) {
-        if (ctx->recv_func(ctx, s, buffer, n, &s->addr_info) == 0)
+        if (ctx->recv_func(ctx, s->id, buffer, n, &s->addr_info) == 0)
             free(buffer);
         buffer = NULL;
     } else if (n < 0) {
@@ -589,7 +600,7 @@ deal_with_udp_message(xnet_context_t *ctx, xnet_socket_t *s) {
 
     n = xnet_recv_udp_data(&ctx->poll, s, &addr_info);
     if (n >= 0) {
-        ctx->recv_func(ctx, s, ctx->poll.udp_buffer, n, &addr_info);
+        ctx->recv_func(ctx, s->id, ctx->poll.udp_buffer, n, &addr_info);
     } else {
         xnet_poll_closefd(&ctx->poll, s);
         return -1;
@@ -610,7 +621,7 @@ xnet_dispatch_loop(xnet_context_t *ctx) {
     int ret, i;
     xnet_poll_event_t *poll_event = &ctx->poll.poll_event;
     xnet_poll_t *poll = &ctx->poll;
-    xnet_socket_t *s, *ns;
+    xnet_socket_t *s;
     
     xnet_timeinfo_t ti;
     int timeout = -1;
@@ -650,9 +661,9 @@ xnet_dispatch_loop(xnet_context_t *ctx) {
             if (!s) continue;
 
             if (s->type == SOCKET_TYPE_LISTENING) {
-                ns = NULL;
-                if (xnet_accept_tcp_socket(poll, s, &ns) == 0) {
-                    ctx->listen_func(ctx, s, ns, &ns->addr_info);
+                int sock_id = xnet_accept_tcp_socket(poll, s);
+                if (sock_id != -1) {
+                    ctx->listen_func(ctx, s->id, sock_id);
                 } else {
                     xnet_error(ctx, "accept tcp socket have error:%d", s->id);
                 }
@@ -662,9 +673,10 @@ xnet_dispatch_loop(xnet_context_t *ctx) {
                 if (poll_event->read[i]) {
                     //输入缓存区有可读数据；处于监听状态，有连接到达；出错
                     //xnet_error(ctx, "read event[%d]", s->id);
+                    int sock_id = s->id;
                     deal_with_message(ctx, s);
                     if (s->type == SOCKET_TYPE_INVALID) {
-                        ctx->error_func(ctx, s, 0);
+                        ctx->error_func(ctx, sock_id, 0);
                         continue;
                     }
                 }
@@ -673,9 +685,10 @@ xnet_dispatch_loop(xnet_context_t *ctx) {
                     //输出缓冲区可写；连接成功
                     //发送缓冲列表内的数据
                     //xnet_error(ctx, "write event[%d]", s->id);
+                    int sock_id = s->id;
                     xnet_send_data(&ctx->poll, s);
                     if (s->type == SOCKET_TYPE_INVALID) {
-                        ctx->error_func(ctx, s, 0);
+                        ctx->error_func(ctx, sock_id, 0);
                         continue;
                     }
                 }
@@ -683,14 +696,14 @@ xnet_dispatch_loop(xnet_context_t *ctx) {
                 if (poll_event->error[i]) {
                     //异常；带外数据
                     //xnet_error(ctx, "poll event error:%d", s->id);
-                    ctx->error_func(ctx, s, 1);
+                    ctx->error_func(ctx, s->id, 1);
                     xnet_poll_closefd(&ctx->poll, s);
                 }
 #ifndef _WIN32
                 if (poll_event->eof[i]) {
                     //epoll特有的标记
                     //xnet_error(ctx, "poll event eof:%d", s->id);
-                    ctx->error_func(ctx, s, 2);
+                    ctx->error_func(ctx, s->id, 2);
                     xnet_poll_closefd(&ctx->poll, s);
                 }
 #endif

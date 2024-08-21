@@ -13,22 +13,19 @@ lua_pop(L, 1);                                       \
 
 static int
 _xnet_tcp_connect(lua_State *L) {
-	//param:ip/addr
-	//returns:sock id
 	GET_XNET_CTX
 
 	const char *addr = luaL_checkstring(L, 1);
 	int port = (int)luaL_checkinteger(L, 2);
-	xnet_socket_t *sock;
-	int rc = xnet_tcp_connect(ctx, addr, port, &sock);
+
+	int rc = xnet_tcp_connect(ctx, addr, port);
 	if (rc == -1) {
 		lua_pushinteger(L, rc);
 		return 1;
 	}
 
 	lua_pushinteger(L, rc);
-	lua_pushlightuserdata(L, sock);
-	return 2;
+	return 1;
 }
 
 static int
@@ -37,36 +34,32 @@ _xnet_tcp_listen(lua_State *L) {
 	const char *host = luaL_checkstring(L, 1);
 	int port = luaL_checkinteger(L, 2);
 	int backlog = luaL_optinteger(L, 3, 5);
-	lua_getfield(L, LUA_REGISTRYINDEX, "xnet_ctx");
-	xnet_socket_t *s = NULL;
-	int rc = xnet_tcp_listen(ctx, host, port, backlog, &s);
-	if (rc == -1) {
+
+	int sock_id = xnet_tcp_listen(ctx, host, port, backlog);
+	if (sock_id == -1) {
 		lua_pushboolean(L, 0);
 		return 1;
 	}
 	lua_pushboolean(L, 1);
-	lua_pushlightuserdata(L, s);
+	lua_pushinteger(L, sock_id);
 	return 2;
 }
 
 static int
 _xnet_tcp_send_buffer(lua_State *L) {
 	GET_XNET_CTX
-	if (!lua_islightuserdata(L, 1)) {
-		luaL_error(L, "error sock");
-	}
-	xnet_socket_t *s = lua_touserdata(L, 1);
+	int sock_id = luaL_checkinteger(L, 1);
 	int type = lua_type(L, 2);
 	if (type == LUA_TSTRING) {
 		const char *buffer = NULL;
 		size_t sz = 0;
 		buffer = lua_tolstring(L, 2, &sz);
-		xnet_tcp_send_buffer(ctx, s, buffer, (int)sz, false);
+		xnet_tcp_send_buffer(ctx, sock_id, buffer, (int)sz, false);
 	} else if (type == LUA_TLIGHTUSERDATA) {
 		//light user data is don't need free.
 		char *buffer = lua_touserdata(L, 2);
 		int sz = luaL_checkinteger(L, 3);
-		xnet_tcp_send_buffer(ctx, s, buffer, sz, true);
+		xnet_tcp_send_buffer(ctx, sock_id, buffer, sz, true);
 	} else {
 		luaL_error(L, "error buffer type");
 	}
@@ -76,11 +69,8 @@ _xnet_tcp_send_buffer(lua_State *L) {
 static int
 _xnet_close_socket(lua_State *L) {
 	GET_XNET_CTX
-	if (!lua_islightuserdata(L, 1)) {
-		luaL_error(L, "error sock");
-	}
-	xnet_socket_t *s = lua_touserdata(L, 1);
-	xnet_close_socket(ctx, s);
+	int sock_id = luaL_checkinteger(L, 1);
+	xnet_close_socket(ctx, sock_id);
 	return 0;
 }
 
@@ -108,37 +98,38 @@ _xnet_udp_listen(lua_State *L) {
 	const char *host = luaL_checkstring(L, 1);
 	int port = luaL_checkinteger(L, 2);
 
-	xnet_socket_t *s = NULL;
-	int rc = xnet_udp_listen(ctx, host, port, &s);
+	int rc = xnet_udp_listen(ctx, host, port);
 	if (rc == -1) {
 		lua_pushboolean(L, 0);
 		return 1;
 	}
 	lua_pushboolean(L, 1);
-	lua_pushlightuserdata(L, s);
+	lua_pushinteger(L, rc);
 	return 2;
 }
 
 static int
 _xnet_udp_sendto(lua_State *L) {
 	GET_XNET_CTX
-	if (!lua_islightuserdata(L, 1)) {
-		luaL_error(L, "error sock");
-	}
-	if (!lua_islightuserdata(L, 2)) {
+
+	size_t sz = 0;
+	int sock_id = luaL_checkinteger(L, 1);
+	const char *addr_string = luaL_checklstring(L, 2, &sz);
+	if (sz != sizeof(xnet_addr_t)) {
 		luaL_error(L, "error addr");
 	}
-	xnet_socket_t *s = lua_touserdata(L, 1);
-	xnet_addr_t *addr = lua_touserdata(L, 2);
+	xnet_addr_t addr;
+	memcpy(&addr, addr_string, sizeof(addr));
+
 	int type = lua_type(L, 3);
 	if (type == LUA_TSTRING) {
 		size_t size = 0;
 		const char *buffer = lua_tolstring(L, 3, &size);
-		xnet_udp_sendto(ctx, s, addr, buffer, (int)size, false);
+		xnet_udp_sendto(ctx, sock_id, &addr, buffer, (int)size, false);
 	} else if (type == LUA_TLIGHTUSERDATA) {
 		char *buffer = lua_touserdata(L, 3);
 		int size = luaL_checkinteger(L, 4);
-		xnet_udp_sendto(ctx, s, addr, buffer, size, true);
+		xnet_udp_sendto(ctx, sock_id, &addr, buffer, size, true);
 	} else {
 		luaL_error(L, "error buffer type");
 	}
@@ -153,27 +144,24 @@ _xnet_udp_create(lua_State *L) {
 		luaL_error(L, "unknow protocol %d", protocol);
 	}
 
-	xnet_socket_t *s = NULL;
-	int rc = xnet_udp_create(ctx, protocol, &s);
+	int rc = xnet_udp_create(ctx, protocol);
 	if (rc == -1) {
 		lua_pushboolean(L, 0);
 		return 1;
 	}
 	lua_pushboolean(L, 1);
-	lua_pushlightuserdata(L, s);
+	lua_pushinteger(L, rc);
 	return 2;
 }
 
 static int
 _xnet_udp_set_addr(lua_State *L) {
 	GET_XNET_CTX
-	if (!lua_islightuserdata(L, 1)) {
-		luaL_error(L, "error sock");
-	}
-	xnet_socket_t *s = lua_touserdata(L, 1);
+
+	int sock_id = luaL_checkinteger(L, 1);
 	const char *host = luaL_checkstring(L, 2);
 	int port = luaL_checkinteger(L, 3);
-	int rc = xnet_udp_set_addr(ctx, s, host, port);
+	int rc = xnet_udp_set_addr(ctx, sock_id, host, port);
 	if (rc == -1) {
 		lua_pushboolean(L, 0);
 		return 1;
@@ -185,19 +173,16 @@ _xnet_udp_set_addr(lua_State *L) {
 static int
 _xnet_udp_send_buffer(lua_State *L) {
 	GET_XNET_CTX
-	if (!lua_islightuserdata(L, 1)) {
-		luaL_error(L, "error sock");
-	}
-	xnet_socket_t *s = lua_touserdata(L, 1);
+	int sock_id = luaL_checkinteger(L, 1);
 	int type = lua_type(L, 2);
 	if (type == LUA_TSTRING) {
 		size_t size = 0;
 		const char *buffer = lua_tolstring(L, 2, &size);
-		xnet_udp_send_buffer(ctx, s, buffer, (int)size, false);
+		xnet_udp_send_buffer(ctx, sock_id, buffer, (int)size, false);
 	} else if (type == LUA_TLIGHTUSERDATA) {
 		char *buffer = lua_touserdata(L, 2);
 		int size = luaL_checkinteger(L, 3);
-		xnet_udp_send_buffer(ctx, s, buffer, size, true);
+		xnet_udp_send_buffer(ctx, sock_id, buffer, size, true);
 	} else {
 		luaL_error(L, "error buffer type");
 	}
@@ -213,12 +198,16 @@ _register(lua_State *L) {
 
 static int
 _xnet_addrtoa(lua_State *L) {
-	if (!lua_islightuserdata(L, 1)) {
-		luaL_error(L, "error addr type");
+	size_t sz = 0;
+	const char *addr_string = luaL_checklstring(L, 1, &sz);
+	if (sz != sizeof(xnet_addr_t)) {
+		luaL_error(L, "error addr");
 	}
+
+	xnet_addr_t addr;
+	memcpy(&addr, addr_string, sizeof(addr));
 	char str[64] = {0};
-	xnet_addr_t *addr = lua_touserdata(L, 1); 
-	xnet_addrtoa(addr, str);
+	xnet_addrtoa(&addr, str);
 	lua_pushstring(L, str);
 	return 1;
 }
@@ -227,7 +216,8 @@ static void
 http_callback(xnet_unpacker_t *up, void *arg) {
 	xnet_httprequest_t *req = (xnet_httprequest_t *) arg;
 	xnet_context_t *ctx = (xnet_context_t *)up->user_ptr;
-	xnet_socket_t *s = (xnet_socket_t *)up->user_arg;
+	int sock_id = (int)up->user_arg;
+	xnet_socket_t *s = xnet_get_socket(ctx, sock_id);
 	lua_State *L = ctx->user_ptr;
 
 	int ftype = lua_getfield(L, LUA_REGISTRYINDEX, "reg_funcs");
@@ -267,7 +257,8 @@ http_callback(xnet_unpacker_t *up, void *arg) {
 	}
 	
 	lua_pushnil(L);
-	if (lua_pcall(L, 4, 0, 0) != LUA_OK) {
+	lua_pushlstring(L, (char*)&s->addr_info, sizeof(xnet_addr_t));
+	if (lua_pcall(L, 5, 0, 0) != LUA_OK) {
 		xnet_error(ctx, "http call recv error:%s", lua_tostring(L, -1));
 	}
 }
@@ -276,7 +267,8 @@ static void
 sizebuffer_callback(xnet_unpacker_t *up, void *arg) {
 	xnet_sizebuffer_t *sb = (xnet_sizebuffer_t *)arg;
 	xnet_context_t *ctx = (xnet_context_t *)up->user_ptr;
-	xnet_socket_t *s = (xnet_socket_t *)up->user_arg;
+	int sock_id = (int)up->user_arg;
+	xnet_socket_t *s = xnet_get_socket(ctx, sock_id);
 	lua_State *L = ctx->user_ptr;
 
 	int ftype = lua_getfield(L, LUA_REGISTRYINDEX, "reg_funcs");
@@ -293,7 +285,8 @@ sizebuffer_callback(xnet_unpacker_t *up, void *arg) {
 	lua_pushinteger(L, XNET_PACKER_TYPE_SIZEBUFFER);
 	lua_pushlstring(L, sb->recv_buffer, sb->buffer_size);
 	lua_pushinteger(L, sb->buffer_size);
-	if (lua_pcall(L, 4, 0, 0) != LUA_OK) {
+	lua_pushlstring(L, (char*)&s->addr_info, sizeof(xnet_addr_t));
+	if (lua_pcall(L, 5, 0, 0) != LUA_OK) {
 		xnet_error(ctx, "sizebuffer call recv error:%s", lua_tostring(L, -1));
 	}
 }
@@ -302,8 +295,9 @@ static void
 linebuffer_callback(xnet_unpacker_t *up, void *arg) {
 	xnet_linebuffer_t *lb = (xnet_linebuffer_t *)arg;
 	xnet_context_t *ctx = (xnet_context_t *)up->user_ptr;
-	xnet_socket_t *s = (xnet_socket_t *)up->user_arg;
+	int sock_id = (int)up->user_arg;
 	lua_State *L = ctx->user_ptr;
+	xnet_socket_t *s = xnet_get_socket(ctx, sock_id);
 
 	int ftype = lua_getfield(L, LUA_REGISTRYINDEX, "reg_funcs");
 	if (ftype != LUA_TTABLE) {
@@ -315,11 +309,12 @@ linebuffer_callback(xnet_unpacker_t *up, void *arg) {
 		xnet_error(ctx, "recv is not a function");
 		return;
 	}
-	lua_pushlightuserdata(L, s);
+	lua_pushinteger(L, sock_id);
 	lua_pushinteger(L, XNET_PACKER_TYPE_LINE);
 	lua_pushstring(L, xnet_string_get_c_str(&lb->line_str));
 	lua_pushnil(L);
-	if (lua_pcall(L, 4, 0, 0) != LUA_OK) {
+	lua_pushlstring(L, (char*)&s->addr_info, sizeof(xnet_addr_t));
+	if (lua_pcall(L, 5, 0, 0) != LUA_OK) {
 		xnet_error(ctx, "linebuffer call recv error:%s", lua_tostring(L, -1));
 	}
 }
@@ -328,11 +323,13 @@ linebuffer_callback(xnet_unpacker_t *up, void *arg) {
 static int
 _register_packer(lua_State *L) {
 	GET_XNET_CTX
-	if (!lua_islightuserdata(L, 1)) {
-		luaL_error(L, "error addr type");
-	}
-	xnet_socket_t *s = lua_touserdata(L, 1);
+	int sock_id = luaL_checkinteger(L, 1);
 	int pack_type = luaL_checkinteger(L, 2);
+
+	xnet_socket_t *s = xnet_get_socket(ctx, sock_id);
+	if (s == NULL) {
+		luaL_error(L, "error sock id: %s", sock_id);
+	}
 
 	if (s->unpacker) {
 		luaL_error(L, "already register pack type");
@@ -356,7 +353,7 @@ _register_packer(lua_State *L) {
 		luaL_error(L, "register pack type error");
 	}
 	up->user_ptr = ctx;
-	up->user_arg = s;
+	up->user_arg = (void*)sock_id;
 	s->unpacker = up;	
 
 	return 0;

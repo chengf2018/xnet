@@ -6,26 +6,28 @@
 static xnet_context_t *g_worker_ctx = NULL;
 
 static void
-listen_func(xnet_context_t *ctx, xnet_socket_t *s, xnet_socket_t *ns, xnet_addr_t *addr_info) {
+listen_func(xnet_context_t *ctx, int sock_id, int acc_sock_id) {
+    xnet_socket_t *ns = xnet_get_socket(ctx, acc_sock_id);
     char str[64] = {0};
-    xnet_addrtoa(addr_info, str);
-	xnet_error(ctx, "-----socket [%d] accept new, new socket:[%d], [%s]", s->id, ns->id, str);
+    xnet_addrtoa(&ns->addr_info, str);
+	xnet_error(ctx, "-----socket [%d] accept new, new socket:[%d], [%s]", sock_id, acc_sock_id, str);
 }
 
 static void
-error_func(xnet_context_t *ctx, xnet_socket_t *s, short what) {
-	xnet_error(ctx, "-----socket [%d] error, what:[%u]", s->id, what);
+error_func(xnet_context_t *ctx, int sock_id, short what) {
+	xnet_error(ctx, "-----socket [%d] error, what:[%u]", sock_id, what);
 }
 
 static int
-recv_func(xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int size, xnet_addr_t *addr_info) {
+recv_func(xnet_context_t *ctx, int sock_id, char *buffer, int size, xnet_addr_t *addr_info) {
     char *str = xnet_send_buffer_malloc(size+1);
     memcpy(str, buffer, size);
     str[size] = '\0';
 
-	//xnet_error(ctx, "-----socket [%d] recv buffer [%s], size[%d]", s->id, str, size);
-	xnet_tcp_send_buffer_ref(ctx, s, str, size, true);
-    xnet_tcp_send_buffer_ref(ctx, s, str, size, true);
+    xnet_error(ctx, "-----socket [%d] recv buffer[%d]", sock_id, size);
+
+	xnet_tcp_send_buffer_ref(ctx, sock_id, str, size, true);
+    xnet_tcp_send_buffer_ref(ctx, sock_id, str, size, true);
 
     if (g_worker_ctx) {
         xnet_send_command(g_worker_ctx, ctx, 1, buffer, size);
@@ -125,8 +127,8 @@ pthread_detach(pid);
 
     xnet_register_listener(ctx, listen_func, error_func, recv_func);
 xnet_error(ctx, "------start listen------");
-    ret = xnet_tcp_listen(ctx, NULL, 8888, 5, NULL);
-    if (ret != 0) goto _END;
+    ret = xnet_tcp_listen(ctx, NULL, 8888, 5);
+    if (ret == -1) goto _END;
 
     xnet_register_timeout(ctx, timeout_func);
     xnet_add_timer(ctx, 1, 2000);

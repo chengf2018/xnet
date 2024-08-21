@@ -16,12 +16,10 @@ void xnet_destroy_context(xnet_context_t *ctx);
 
 void xnet_error(xnet_context_t *ctx, char *str, ...);
 
-/*register类接口只能在主线程使用，在其他线程使用需要使用异步接口*/
+/*`register`, `dispatch_loop` interface can only be used in main thread*/
 
-//listen_func:服务端监听回调
 void xnet_register_listener(xnet_context_t *ctx, xnet_listen_func_t listen_func, \
 	xnet_error_func_t error_func, xnet_recv_func_t recv_func);
-//connect_func:客户端连接成功回调
 void xnet_register_connecter(xnet_context_t *ctx, xnet_connect_func_t connect_func, \
 	xnet_error_func_t error_func, xnet_recv_func_t recv_func);
 void xnet_register_timeout(xnet_context_t *ctx, xnet_timeout_func_t timeout_func);
@@ -37,26 +35,34 @@ char *xnet_send_buffer_malloc(size_t size);
 void xnet_send_buffer_free(char *ptr);
 
 /*---------Main Thread Method Begin---------*/
-int xnet_tcp_connect(xnet_context_t *ctx, const char *host, int port, xnet_socket_t **socket_out);//异步，通过connected事件回调
-int xnet_tcp_listen(xnet_context_t *ctx, const char *host, int port, int backlog, xnet_socket_t **socket_out);
-void xnet_tcp_send_buffer(xnet_context_t *ctx, xnet_socket_t *s, const char *buffer, int sz, bool raw);
+
+/*
+ * method : xnet_get_socket
+ * Use carefully: xnet_get_socket method returned pointer maybe invalid after alloc fd,
+ * use sock_id at all times, if not necessary.
+ */
+xnet_socket_t *xnet_get_socket(xnet_context_t *ctx, int sock_id);
+
+int xnet_tcp_connect(xnet_context_t *ctx, const char *host, int port);
+int xnet_tcp_listen(xnet_context_t *ctx, const char *host, int port, int backlog);
+void xnet_tcp_send_buffer(xnet_context_t *ctx, int sock_id, const char *buffer, int sz, bool raw);
 
 //'buffer' must be asigned by xnet_send_buffer_malloc
-void xnet_tcp_send_buffer_ref(xnet_context_t *ctx, xnet_socket_t *s, const char *buffer, int sz, bool raw);
+void xnet_tcp_send_buffer_ref(xnet_context_t *ctx, int sock_id, const char *buffer, int sz, bool raw);
 
-int xnet_udp_listen(xnet_context_t *ctx, const char *host, int port, xnet_socket_t **socket_out);
+int xnet_udp_listen(xnet_context_t *ctx, const char *host, int port);
 
-void xnet_udp_sendto(xnet_context_t *ctx, xnet_socket_t *s, xnet_addr_t *recv_addr, const char *buffer, int sz, bool raw);
+void xnet_udp_sendto(xnet_context_t *ctx, int sock_id, xnet_addr_t *recv_addr, const char *buffer, int sz, bool raw);
 //'buffer' must be asigned by xnet_send_buffer_malloc
-void xnet_udp_sendto_ref(xnet_context_t *ctx, xnet_socket_t *s, xnet_addr_t *recv_addr, const char *buffer, int sz, bool raw);
-int xnet_udp_create(xnet_context_t *ctx, int protocol, xnet_socket_t **socket_out);
-int xnet_udp_set_addr(xnet_context_t *ctx, xnet_socket_t *s, const char *host, int port);
+void xnet_udp_sendto_ref(xnet_context_t *ctx, int sock_id, xnet_addr_t *recv_addr, const char *buffer, int sz, bool raw);
+int xnet_udp_create(xnet_context_t *ctx, int protocol);
+int xnet_udp_set_addr(xnet_context_t *ctx, int sock_id, const char *host, int port);
 
-void xnet_udp_send_buffer(xnet_context_t *ctx, xnet_socket_t *s, const char *buffer, int sz, bool raw);
+void xnet_udp_send_buffer(xnet_context_t *ctx, int sock_id, const char *buffer, int sz, bool raw);
 //'buffer' must be asigned by xnet_send_buffer_malloc
-void xnet_udp_send_buffer_ref(xnet_context_t *ctx, xnet_socket_t *s, const char *buffer, int sz, bool raw);
+void xnet_udp_send_buffer_ref(xnet_context_t *ctx, int sock_id, const char *buffer, int sz, bool raw);
 
-void xnet_close_socket(xnet_context_t *ctx, xnet_socket_t *s);
+void xnet_close_socket(xnet_context_t *ctx, int sock_id);
 int xnet_add_timer(xnet_context_t *ctx, int id, int timeout);
 void xnet_exit(xnet_context_t *ctx);
 /*---------Main Thread Method End---------*/

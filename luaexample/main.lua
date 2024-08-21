@@ -8,17 +8,16 @@ function Start()
 	xnet.add_timer(1, 1000);
 	xnet.register({
 		listen = function(s, ns, addr)
-			print("----lua: new connection", s, ns, addr, xnet.addrtoa(addr))
+			print("----lua: new connection", s, ns, xnet.addrtoa(addr))
 			socket_list[ns] = ns
-			--xnet.register_packer(ns, xnet.PACKER_TYPE_LINE)
-			xnet.register_packer(ns, nil)
+			xnet.register_packer(ns, xnet.PACKER_TYPE_LINE)
 		end,
 		error = function(s, what)
 			print("----lua: error", s, what)
 			socket_list[ns] = nil
 		end,
-		recv = function(s, pkg_type, pkg, sz)
-			print("----lua: recv", s, pkg_type, pkg, sz)
+		recv = function(s, pkg_type, pkg, sz, addr)
+			print("----lua: recv", s, pkg_type, pkg, sz, xnet.addrtoa(addr))
 		end,
 		timeout = function(id)
 			print("----lua:timeout", id)

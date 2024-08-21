@@ -146,6 +146,7 @@ int xnet_poll_deinit(xnet_poll_t *poll);
 int xnet_poll_addfd(xnet_poll_t *poll, SOCKET_TYPE fd, int id);
 int xnet_poll_closefd(xnet_poll_t *poll, xnet_socket_t *s);
 int xnet_poll_wait(xnet_poll_t *poll, int timeout);//进行io等待，触发后返回触发的socket列表，保存在poll->event中
+xnet_socket_t *xnet_poll_get_socket(xnet_poll_t *poll, int id);
 
 int xnet_enable_read(xnet_poll_t *poll, xnet_socket_t *s, bool enable);
 int xnet_enable_write(xnet_poll_t *poll, xnet_socket_t *s, bool enable);
@@ -154,12 +155,12 @@ int xnet_recv_data(xnet_poll_t *poll, xnet_socket_t *s, char **out_data);
 int xnet_recv_udp_data(xnet_poll_t *poll, xnet_socket_t *s, xnet_addr_t *addr_out);
 int xnet_send_data(xnet_poll_t *poll, xnet_socket_t *s);
 
-int xnet_listen_tcp_socket(xnet_poll_t *poll, const char *host, int port, int backlog, xnet_socket_t **socket_out);
-int xnet_accept_tcp_socket(xnet_poll_t *poll, xnet_socket_t *listen_s, xnet_socket_t **socket_out);
-int xnet_connect_tcp_socket(xnet_poll_t *poll, const char *host, int port, xnet_socket_t **socket_out);
+int xnet_listen_tcp_socket(xnet_poll_t *poll, const char *host, int port, int backlog);
+int xnet_accept_tcp_socket(xnet_poll_t *poll, xnet_socket_t *listen_s);
+int xnet_connect_tcp_socket(xnet_poll_t *poll, const char *host, int port, int *socket_out);
 
-int xnet_listen_udp_socket(xnet_poll_t *poll, const char *host, int port, xnet_socket_t **socket_out);
-int xnet_create_udp_socket(xnet_poll_t *poll, int protocol, xnet_socket_t **socket_out);
+int xnet_listen_udp_socket(xnet_poll_t *poll, const char *host, int port);
+int xnet_create_udp_socket(xnet_poll_t *poll, int protocol);
 int xnet_set_udp_socket_addr(xnet_poll_t *poll, xnet_socket_t *s, const char *host, int port);
 int xnet_udp_connect(xnet_poll_t *poll, xnet_socket_t * s, const char *host, int port);
 

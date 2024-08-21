@@ -1,14 +1,16 @@
 #include "../src/xnet.h"
 
-static xnet_socket_t *g_s = NULL;
+static int g_s = -1;
 
 static void
-error_func(struct xnet_context_t *ctx, xnet_socket_t *s, short what) {
+error_func(struct xnet_context_t *ctx, int sock_id, short what) {
+    xnet_socket_t *s = xnet_get_socket(ctx, sock_id);
 	xnet_error(ctx, "-----socket [%d] error, what:[%u]", s->id, what);
 }
 
 static int
-recv_func(struct xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int size, xnet_addr_t *addr_info) {
+recv_func(struct xnet_context_t *ctx, int sock_id, char *buffer, int size, xnet_addr_t *addr_info) {
+    xnet_socket_t *s = xnet_get_socket(ctx, sock_id);
     char str[64] = {0};
     xnet_addrtoa(addr_info, str);
 	xnet_error(ctx, "-----socket [%d] recv buffer[%s], size[%d], from [%s]", s->id, buffer, size, str);
@@ -41,8 +43,8 @@ main(int argc, char** argv) {
     }
     xnet_register_connecter(ctx, NULL, error_func, recv_func);
 
-    ret = xnet_udp_create(ctx, SOCKET_PROTOCOL_UDP, &g_s);
-    if (ret != 0) goto _END;
+    g_s = xnet_udp_create(ctx, SOCKET_PROTOCOL_UDP);
+    if (g_s == -1) goto _END;
     ret = xnet_udp_set_addr(ctx, g_s, "127.0.0.1", 4396);
     if (ret != 0) goto _END;
 

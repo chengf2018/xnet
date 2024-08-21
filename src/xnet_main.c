@@ -41,12 +41,13 @@ call_lua_stop(lua_State *L, xnet_context_t *ctx) {
 
 
 static void
-listen_func(xnet_context_t *ctx, xnet_socket_t *s, xnet_socket_t *ns, xnet_addr_t *addr_info) {
+listen_func(xnet_context_t *ctx, int sock_id, int acc_sock_id) {
+	xnet_socket_t *ns = xnet_get_socket(ctx, acc_sock_id);
     char addr_str[64] = {0};
     lua_State *L = ctx->user_ptr;
 
-    xnet_addrtoa(addr_info, addr_str);
-	xnet_error(ctx, "-----socket [%d] accept new, new socket:[%d], [%s]", s->id, ns->id, addr_str);
+    xnet_addrtoa(&ns->addr_info, addr_str);
+	xnet_error(ctx, "-----socket [%d] accept new, new socket:[%d], [%s]", sock_id, acc_sock_id, addr_str);
 	
 	int ftype = lua_getfield(L, LUA_REGISTRYINDEX, "reg_funcs");
 	if (ftype != LUA_TTABLE) {
@@ -55,9 +56,9 @@ listen_func(xnet_context_t *ctx, xnet_socket_t *s, xnet_socket_t *ns, xnet_addr_
 	}
 
 	if (lua_getfield(L, -1, "listen") == LUA_TFUNCTION) {
-		lua_pushlightuserdata(L, s);
-		lua_pushlightuserdata(L, ns);
-		lua_pushlightuserdata(L, addr_info);
+		lua_pushinteger(L, sock_id);
+		lua_pushinteger(L, acc_sock_id);
+		lua_pushlstring(L, (char*)&ns->addr_info, sizeof(xnet_addr_t));
 		if (lua_pcall(L, 3, 0, 0) != LUA_OK) {
 			xnet_error(ctx, "call listen fail:%s", lua_tostring(L, -1));
 			return;
@@ -66,9 +67,9 @@ listen_func(xnet_context_t *ctx, xnet_socket_t *s, xnet_socket_t *ns, xnet_addr_
 }
 
 static void
-error_func(xnet_context_t *ctx, xnet_socket_t *s, short what) {
+error_func(xnet_context_t *ctx, int sock_id, short what) {
 	lua_State *L = ctx->user_ptr;
-	xnet_error(ctx, "-----socket [%d] error, what:[%u]", s->id, what);
+	xnet_error(ctx, "-----socket [%d] error, what:[%u]", sock_id, what);
 
 	int ftype = lua_getfield(L, LUA_REGISTRYINDEX, "reg_funcs");
 	if (ftype != LUA_TTABLE) {
@@ -77,7 +78,7 @@ error_func(xnet_context_t *ctx, xnet_socket_t *s, short what) {
 	}
 
 	if (lua_getfield(L, -1, "error") == LUA_TFUNCTION) {
-		lua_pushlightuserdata(L, s);
+		lua_pushinteger(L, sock_id);
 		lua_pushinteger(L, what);
 		if (lua_pcall(L, 2, 0, 0) != LUA_OK) {
 			xnet_error(ctx, "call error fail:%s", lua_tostring(L, -1));
@@ -86,17 +87,13 @@ error_func(xnet_context_t *ctx, xnet_socket_t *s, short what) {
 	}
 }
 
-static void
-do_unpack_recv(xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int size, xnet_addr_t *addr_info) {
-	if (xnet_unpacker_recv(s->unpacker, buffer, size) != 0) {
-		xnet_error(ctx, "unpacker recv error");
-	}
-}
-
 static int
-recv_func(xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int size, xnet_addr_t *addr_info) {
+recv_func(xnet_context_t *ctx, int sock_id, char *buffer, int size, xnet_addr_t *addr_info) {
+	xnet_socket_t *s = xnet_get_socket(ctx, sock_id);
 	if (s->unpacker != NULL) {
-		do_unpack_recv(ctx, s, buffer, size, addr_info);
+		if (xnet_unpacker_recv(s->unpacker, buffer, size) != 0) {
+			xnet_error(ctx, "unpacker recv error");
+		}
 		return 0;
 	}
 
@@ -109,11 +106,12 @@ recv_func(xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int size, xnet_ad
 	}
 
 	if (lua_getfield(L, -1, "recv") == LUA_TFUNCTION) {
-		lua_pushlightuserdata(L, s);
+		lua_pushinteger(L, sock_id);
 		lua_pushinteger(L, 0);
 		lua_pushlstring(L, buffer, size);
 		lua_pushinteger(L, size);
-		if (lua_pcall(L, 4, 0, 0) != LUA_OK) {
+		lua_pushlstring(L, (char*)addr_info, sizeof(xnet_addr_t));
+		if (lua_pcall(L, 5, 0, 0) != LUA_OK) {
 			xnet_error(ctx, "call recv error:%s", lua_tostring(L, -1));
 			return 0;
 		}
@@ -162,8 +160,9 @@ command_func(xnet_context_t *ctx, xnet_context_t *source, int command, void *dat
 }
 
 static void
-connect_func(struct xnet_context_t *ctx, xnet_socket_t *s, int error) {
-	xnet_error(ctx, "-----socket [%d] connected. error:[%d]", s->id, error);
+connect_func(struct xnet_context_t *ctx, int sock_id, int error) {
+	xnet_error(ctx, "-----socket [%d] connected. error:[%d]", sock_id, error);
+
 	lua_State *L = ctx->user_ptr;
 	int ftype = lua_getfield(L, LUA_REGISTRYINDEX, "reg_funcs");
 	if (ftype != LUA_TTABLE) {
@@ -171,7 +170,7 @@ connect_func(struct xnet_context_t *ctx, xnet_socket_t *s, int error) {
 		return;
 	}    
 	if (lua_getfield(L, -1, "connected") == LUA_TFUNCTION) {
-		lua_pushlightuserdata(L, s);
+		lua_pushinteger(L, sock_id);
 		lua_pushinteger(L, error);
 		if (lua_pcall(L, 2, 0, 0) != LUA_OK) {
 			xnet_error(ctx, "call connected error:%s", lua_tostring(L, -1));

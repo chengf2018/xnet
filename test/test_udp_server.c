@@ -1,18 +1,18 @@
 #include "../src/xnet.h"
 
-static xnet_socket_t *g_s = NULL;
+static int g_s = -1;
 
 static void
-error_func(struct xnet_context_t *ctx, xnet_socket_t *s, short what) {
-	xnet_error(ctx, "-----socket [%d] error, what:[%u]", s->id, what);
+error_func(struct xnet_context_t *ctx, int sock_id, short what) {
+	xnet_error(ctx, "-----socket [%d] error, what:[%u]", sock_id, what);
 }
 
 static int
-recv_func(struct xnet_context_t *ctx, xnet_socket_t *s, char *buffer, int size, xnet_addr_t *addr_info) {
+recv_func(struct xnet_context_t *ctx, int sock_id, char *buffer, int size, xnet_addr_t *addr_info) {
     char str[64] = {0};
     xnet_addrtoa(addr_info, str);
-	xnet_error(ctx, "-----socket [%d] recv buffer[%s], size[%d], from[%s]", s->id, buffer, size, str);
-    xnet_udp_sendto(ctx, s, addr_info, buffer, size, false);
+	xnet_error(ctx, "-----socket [%d] recv buffer[%s], size[%d], from[%s]", sock_id, buffer, size, str);
+    xnet_udp_sendto(ctx, sock_id, addr_info, buffer, size, false);
     return 0;
 }
 
@@ -29,8 +29,8 @@ main(int argc, char** argv) {
 
     ctx = xnet_create_context();
     xnet_register_listener(ctx, NULL, error_func, recv_func);
-    ret = xnet_udp_listen(ctx, "0.0.0.0", 4396, &g_s);
-    if (ret != 0) goto _END;
+    g_s = xnet_udp_listen(ctx, "0.0.0.0", 4396);
+    if (g_s == -1) goto _END;
 xnet_error(ctx, "start server loop");
 	xnet_dispatch_loop(ctx);
 _END:

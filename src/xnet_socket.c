@@ -76,6 +76,7 @@ alloc_socket_id(xnet_poll_t *poll) {
 
     if (poll->slot_size < MAX_CLIENT_NUM) {
         new_size = poll->slot_size ? (poll->slot_size * 2) : 32;
+        //realloc may changed the socket pointer
         slots = realloc(poll->slots, sizeof(*poll->slots)*new_size);
         if (!slots) return -1;
 
@@ -322,6 +323,11 @@ xnet_poll_wait(xnet_poll_t *poll, int timeout) {
     return poll_wait(poll, timeout);
 }
 
+xnet_socket_t *
+xnet_poll_get_socket(xnet_poll_t *poll, int id) {
+    return &poll->slots[id % poll->slot_size];
+}
+
 static SOCKET_TYPE
 do_bind(const char *host, int port, int protocol, int *family) {
     SOCKET_TYPE fd = -1;
@@ -361,8 +367,10 @@ FAILED_FD:
     return -1;
 }
 
+
+
 int
-xnet_listen_tcp_socket(xnet_poll_t *poll, const char *host, int port, int backlog, xnet_socket_t **socket_out) {
+xnet_listen_tcp_socket(xnet_poll_t *poll, const char *host, int port, int backlog) {
     xnet_socket_t *s;
     int id, family;
     SOCKET_TYPE fd = do_bind(host, port, IPPROTO_TCP, &family);
@@ -376,15 +384,14 @@ xnet_listen_tcp_socket(xnet_poll_t *poll, const char *host, int port, int backlo
     s = new_fd(poll, fd, id, SOCKET_PROTOCOL_TCP, true);
     s->type = SOCKET_TYPE_LISTENING;
 
-    if (socket_out) *socket_out = s;
-    return 0;
+    return id;
 FAILED:
     closesocket(fd);
     return -1;
 }
 
 int
-xnet_accept_tcp_socket(xnet_poll_t *poll, xnet_socket_t *listen_s, xnet_socket_t **socket_out) {
+xnet_accept_tcp_socket(xnet_poll_t *poll, xnet_socket_t *listen_s) {
     union sockaddr_all client_addr;
     xnet_socket_t *s;
     socklen_t client_addrlen = sizeof(client_addr);
@@ -408,8 +415,7 @@ xnet_accept_tcp_socket(xnet_poll_t *poll, xnet_socket_t *listen_s, xnet_socket_t
     else
         xnet_gen_addr(SOCKET_ADDR_TYPE_IPV6, &client_addr, &s->addr_info);
 
-    if (socket_out) *socket_out = s;
-    return 0;
+    return id;
 FAILED:
     if (fd) closesocket(fd);
     return -1;
@@ -419,7 +425,7 @@ FAILED:
 //返回0，连接中
 //返回-1，连接失败
 int
-xnet_connect_tcp_socket(xnet_poll_t *poll, const char *host, int port, xnet_socket_t **socket_out) {
+xnet_connect_tcp_socket(xnet_poll_t *poll, const char *host, int port, int *socket_out) {
     int status, err, id;
     struct addrinfo ai_hints;
     struct addrinfo *ai_list = NULL;
@@ -469,7 +475,7 @@ xnet_connect_tcp_socket(xnet_poll_t *poll, const char *host, int port, xnet_sock
 
     id = alloc_socket_id(poll);
     s = new_fd(poll, sock, id, SOCKET_PROTOCOL_TCP, true);
-    if (socket_out) *socket_out = s;
+    if (socket_out) *socket_out = id;
 
     if (status == 0) {
         //connect success
@@ -489,7 +495,7 @@ FAILED:
 }
 
 int
-xnet_listen_udp_socket(xnet_poll_t *poll, const char *host, int port, xnet_socket_t **socket_out) {
+xnet_listen_udp_socket(xnet_poll_t *poll, const char *host, int port) {
     xnet_socket_t *s;
     SOCKET_TYPE fd;
     int id, family, protocol;
@@ -506,15 +512,15 @@ xnet_listen_udp_socket(xnet_poll_t *poll, const char *host, int port, xnet_socke
 #ifdef _WIN32
     disable_udp_resterr(fd);
 #endif
-    if (socket_out) *socket_out = s;
-    return 0;
+
+    return id;
 FAILED:
     if (fd) closesocket(fd);
     return -1;
 }
 
 int
-xnet_create_udp_socket(xnet_poll_t *poll, int protocol, xnet_socket_t **socket_out) {
+xnet_create_udp_socket(xnet_poll_t *poll, int protocol) {
     xnet_socket_t *s;
     SOCKET_TYPE fd;
     int id, family;
@@ -537,8 +543,8 @@ xnet_create_udp_socket(xnet_poll_t *poll, int protocol, xnet_socket_t **socket_o
 #ifdef _WIN32
     disable_udp_resterr(fd);
 #endif
-    if (socket_out) *socket_out = s;
-    return 0;
+
+    return id;
 FAILED:
     if (fd) closesocket(fd);
     return -1;
