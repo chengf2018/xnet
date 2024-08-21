@@ -255,6 +255,7 @@ main(int argc, char **argv) {
 		goto error;
 	}
 	luaL_openlibs(L);
+
 	//lua state must have "Start", "Init" and "Stop" function
 	ret = luaL_dofile(L, server_config.luabooter ? server_config.luabooter : "main.lua");
 	if (ret != LUA_OK) {

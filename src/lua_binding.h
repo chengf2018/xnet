@@ -61,7 +61,7 @@ _xnet_tcp_send_buffer(lua_State *L) {
 		int sz = luaL_checkinteger(L, 3);
 		xnet_tcp_send_buffer(ctx, sock_id, buffer, sz, true);
 	} else {
-		luaL_error(L, "error buffer type");
+		luaL_error(L, "error buffer type %d", type);
 	}
 	return 0;
 }
@@ -232,7 +232,7 @@ http_callback(xnet_unpacker_t *up, void *arg) {
 	}
 
 	int i;
-	lua_pushlightuserdata(L, s);
+	lua_pushinteger(L, sock_id);
 	lua_pushinteger(L, XNET_PACKER_TYPE_HTTP);
 
 	lua_newtable(L);
@@ -243,7 +243,8 @@ http_callback(xnet_unpacker_t *up, void *arg) {
 	lua_pushstring(L, xnet_string_get_c_str(&req->url));
 	lua_setfield(L, -2, "url");
 	lua_pushstring(L, xnet_string_get_c_str(&req->version));
-			
+	lua_setfield(L, -2, "version");	
+
 	lua_newtable(L);
 	for (i=0; i<req->header_count; i++) {
 		lua_pushstring(L, xnet_string_get_c_str(&req->header[i].value));
@@ -281,7 +282,7 @@ sizebuffer_callback(xnet_unpacker_t *up, void *arg) {
 		xnet_error(ctx, "recv is not a function");
 		return;
 	}
-	lua_pushlightuserdata(L, s);
+	lua_pushinteger(L, sock_id);
 	lua_pushinteger(L, XNET_PACKER_TYPE_SIZEBUFFER);
 	lua_pushlstring(L, sb->recv_buffer, sb->buffer_size);
 	lua_pushinteger(L, sb->buffer_size);
@@ -362,6 +363,8 @@ _register_packer(lua_State *L) {
 static void
 xnet_bind_lua(lua_State *L, xnet_context_t *ctx) {
 	ctx->user_ptr = L;
+
+	//xnet_ctx
 	lua_pushlightuserdata(L, ctx);
 	lua_setfield(L, LUA_REGISTRYINDEX, "xnet_ctx");
 	lua_newtable(L);
