@@ -383,3 +383,8 @@ xnet_get_field2b(xnet_config_t *config, const char *field_name, bool *out) {
 	}
 	return false;
 }
+
+bool
+xnet_get_field(xnet_config_t *config, const char *field_name, map_elem_t **elem) {
+	return config_map_find(&config->fields, field_name, elem);
+}

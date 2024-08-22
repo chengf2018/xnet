@@ -360,13 +360,53 @@ _register_packer(lua_State *L) {
 	return 0;
 }
 
+static int
+_get_env(lua_State *L) {
+	const char *env_name = luaL_checkstring(L, 1);
+	xnet_config_t *config;
+	lua_getfield((L), LUA_REGISTRYINDEX, "xnet_config");
+	config = lua_touserdata((L), -1);
+	if (config == NULL) {
+		return luaL_error(L, "init xnet config first");
+	}
+	lua_pop(L, 1);
+
+	map_elem_t *elem;
+	if (!xnet_get_field(config, env_name, &elem)) {
+		lua_pushnil(L);
+		return 1;
+	}
+
+	switch (elem->value_type) {
+		case VALUE_TYPE_NIL:
+			lua_pushnil(L);
+			return 1;
+		case VALUE_TYPE_INT:
+			lua_pushinteger(L, elem->value.i);
+			return 1;
+		case VALUE_TYPE_STRING:
+			lua_pushstring(L, elem->value.s);
+			return 1;
+		case VALUE_TYPE_BOOL:
+			lua_pushboolean(L, elem->value.b ? 1 : 0);
+			return 1;
+	}
+	lua_pushnil(L);
+	return 1;
+}
+
 static void
-xnet_bind_lua(lua_State *L, xnet_context_t *ctx) {
+xnet_bind_lua(lua_State *L, xnet_context_t *ctx, xnet_config_t *config) {
 	ctx->user_ptr = L;
 
 	//xnet_ctx
 	lua_pushlightuserdata(L, ctx);
 	lua_setfield(L, LUA_REGISTRYINDEX, "xnet_ctx");
+	
+	//config
+	lua_pushlightuserdata(L, config);
+	lua_setfield(L, LUA_REGISTRYINDEX, "xnet_config");
+
 	lua_newtable(L);
 
 	//xnet_tcp_connect
@@ -422,6 +462,10 @@ xnet_bind_lua(lua_State *L, xnet_context_t *ctx) {
 	//register_packer
 	lua_pushcfunction(L, _register_packer);
 	lua_setfield(L, -2, "register_packer");
+
+	//config interface
+	lua_pushcfunction(L, _get_env);
+	lua_setfield(L, -2, "get_env");
 
 	//packer type
 	lua_pushinteger(L, XNET_PACKER_TYPE_HTTP);

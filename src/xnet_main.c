@@ -1,10 +1,11 @@
-#include "xnet.h"
 #include <stdio.h>
 #include <lua.h>
 #include <lauxlib.h>
 #include <lualib.h>
-#include "lua_binding.h"
+#include "xnet.h"
 #include "xnet_config.h"
+#include "lua_binding.h"
+
 
 
 typedef struct {
@@ -186,40 +187,40 @@ bind_event(xnet_context_t *ctx) {
 }
 
 static void
-start_init_config(server_config_t *server_config, const char *config_name) {
-	xnet_config_t config;
+start_init_config(server_config_t *server_config, xnet_config_t *config, const char *config_name) {
 	char *value = NULL;
 	//default value
 	server_config->init.log_path = NULL;
 	server_config->init.disable_thread = false;
 	server_config->luabooter = NULL;
-	
+	xnet_config_init(config);
+
 	if (!config_name) return;
 
-	xnet_config_init(&config);
-	if (xnet_parse_config(&config, config_name) != 0) {
-		xnet_release_config(&config);
+	if (xnet_parse_config(config, config_name) != 0) {
+		xnet_release_config(config);
 		printf("parse server config %s error\n", config_name);
 		exit(1);
 	}
 	
-	if (xnet_get_field2s(&config, "log_path", &value))
+	if (xnet_get_field2s(config, "log_path", &value))
 		server_config->init.log_path = strdup(value);
 
-	xnet_get_field2b(&config, "disable_log_thread", &server_config->init.disable_thread);
+	xnet_get_field2b(config, "disable_log_thread", &server_config->init.disable_thread);
 
-	if (xnet_get_field2s(&config, "luabooter", &value))
+	if (xnet_get_field2s(config, "luabooter", &value))
 		server_config->luabooter = strdup(value);
 
-	xnet_release_config(&config);
 }
 
 static void
-release_config(server_config_t *server_config) {
+release_config(server_config_t *server_config, xnet_config_t *config) {
 	if (server_config->init.log_path)
 		free(server_config->init.log_path);
 	if (server_config->luabooter)
 		free(server_config->luabooter);
+	if (config)
+		xnet_release_config(config);
 }
 
 int
@@ -227,6 +228,7 @@ main(int argc, char **argv) {
 	lua_State *L = NULL;
 	xnet_context_t *ctx = NULL;
 	server_config_t server_config;
+	xnet_config_t config;
 	const char *config_name = NULL;
 	int ret;
 
@@ -236,7 +238,7 @@ main(int argc, char **argv) {
 	}
 
 	config_name = argv[1];
-	start_init_config(&server_config, config_name);
+	start_init_config(&server_config, &config, config_name);
 
 	ret = xnet_init((xnet_init_config_t*)&server_config);
 	if (ret != 0) {
@@ -263,7 +265,7 @@ main(int argc, char **argv) {
 		goto error;
 	}
 
-	xnet_bind_lua(L, ctx);
+	xnet_bind_lua(L, ctx, &config);
 	printf("start lua function\n");
 	call_lua_start(L, ctx);
 	call_lua_init(L, ctx);
@@ -275,12 +277,12 @@ main(int argc, char **argv) {
 	lua_close(L);
 	xnet_destroy_context(ctx);
 	xnet_deinit();
-	release_config(&server_config);
+	release_config(&server_config, &config);
 	return 0;
 error:
 	if (L) lua_close(L);
 	if (ctx) xnet_destroy_context(ctx);
 	xnet_deinit();
-	release_config(&server_config);
+	release_config(&server_config, &config);
 	return 1;
 }

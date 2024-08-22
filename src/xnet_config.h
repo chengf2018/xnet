@@ -39,5 +39,6 @@ void xnet_release_config(xnet_config_t *config);
 bool xnet_get_field2i(xnet_config_t *config, const char *field_name, int *out);
 bool xnet_get_field2s(xnet_config_t *config, const char *field_name, char **out);
 bool xnet_get_field2b(xnet_config_t *config, const char *field_name, bool *out);
+bool xnet_get_field(xnet_config_t *config, const char *field_name, map_elem_t **elem);
 
 #endif //_XNET_CONFIG_H_
