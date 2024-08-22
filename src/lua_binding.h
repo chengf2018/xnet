@@ -420,6 +420,13 @@ _xnet_error(lua_State *L) {
 	return 0;
 }
 
+static int
+_xnet_now(lua_State *L) {
+	GET_XNET_CTX
+	lua_pushinteger(L, ctx->nowtime);
+	return 1;
+}
+
 static void
 xnet_bind_lua(lua_State *L, xnet_context_t *ctx, xnet_config_t *config) {
 	ctx->user_ptr = L;
@@ -508,8 +515,13 @@ xnet_bind_lua(lua_State *L, xnet_context_t *ctx, xnet_config_t *config) {
 	lua_pushinteger(L, SOCKET_PROTOCOL_UDP_IPV6);
 	lua_setfield(L, -2, "PROTOCOL_UDP_IPV6");
 
+	//error
 	lua_pushcfunction(L, _xnet_error);
 	lua_setfield(L, -2, "error");
+
+	//now
+	lua_pushcfunction(L, _xnet_now);
+	lua_setfield(L, -2, "now");
 
 	lua_setglobal(L, "xnet");
 }
