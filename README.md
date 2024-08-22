@@ -18,7 +18,7 @@ xnet.register({
 		--接收数据
 	end,
 	timeout = function(id)
-		--超时时间处理
+		--超时事件处理
 	end,
 	command = function(source, command, data, sz)
 		--内部命令

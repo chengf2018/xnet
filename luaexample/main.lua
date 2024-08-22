@@ -15,14 +15,14 @@ function Start()
 
 	xnet.add_timer(1, 1000);
 	xnet.register({
-		listen = function(sid, ns, addr)
-			print("----lua: new connection", sid, ns, xnet.addrtoa(addr))
-			socket_list[ns] = ns
-			xnet.register_packer(ns, xnet.PACKER_TYPE_HTTP)
+		listen = function(sid, new_sid, addr)
+			print("----lua: new connection", sid, new_sid, xnet.addrtoa(addr))
+			socket_list[new_sid] = new_sid
+			xnet.register_packer(new_sid, xnet.PACKER_TYPE_HTTP)
 		end,
 		error = function(sid, what)
 			print("----lua: error", sid, what)
-			socket_list[ns] = nil
+			socket_list[sid] = nil
 		end,
 		recv = function(sid, pkg_type, pkg, sz, addr)
 			print("----lua: recv", sid, pkg_type, pkg, sz, xnet.addrtoa(addr))
@@ -30,7 +30,6 @@ function Start()
 				util.dump_table(pkg)
 				local msg = pack.pack_http(200, nil, "hello world")
 				xnet.tcp_send_buffer(sid, msg)
-				print("tcp_send_buffer", sid, string.len(msg))
 				xnet.close_socket(sid)
 			end
 		end,
