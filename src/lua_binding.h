@@ -395,6 +395,31 @@ _get_env(lua_State *L) {
 	return 1;
 }
 
+static int
+_xnet_error(lua_State *L) {
+	GET_XNET_CTX
+	int n = lua_gettop(L);
+	if (n <= 1) {
+		lua_settop(L, 1);
+		const char * s = luaL_tolstring(L, 1, NULL);
+		xnet_error(ctx, "%s", s);
+		return 0;
+	}
+	luaL_Buffer b;
+	luaL_buffinit(L, &b);
+	int i;
+	for (i=1; i<=n; i++) {
+		luaL_tolstring(L, i, NULL);
+		luaL_addvalue(&b);
+		if (i<n) {
+			luaL_addchar(&b, ' ');
+		}
+	}
+	luaL_pushresult(&b);
+	xnet_error(ctx, "%s", lua_tostring(L, -1));
+	return 0;
+}
+
 static void
 xnet_bind_lua(lua_State *L, xnet_context_t *ctx, xnet_config_t *config) {
 	ctx->user_ptr = L;
@@ -482,6 +507,9 @@ xnet_bind_lua(lua_State *L, xnet_context_t *ctx, xnet_config_t *config) {
 	lua_setfield(L, -2, "PROTOCOL_UDP");
 	lua_pushinteger(L, SOCKET_PROTOCOL_UDP_IPV6);
 	lua_setfield(L, -2, "PROTOCOL_UDP_IPV6");
+
+	lua_pushcfunction(L, _xnet_error);
+	lua_setfield(L, -2, "error");
 
 	lua_setglobal(L, "xnet");
 }

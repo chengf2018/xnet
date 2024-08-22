@@ -278,8 +278,8 @@ xnet_init(xnet_init_config_t *init_config) {
 
 int
 xnet_deinit() {
-    xnet_socket_deinit();
     log_deinit();
+    xnet_socket_deinit();
     return 0;
 }
 
@@ -649,6 +649,7 @@ xnet_dispatch_loop(xnet_context_t *ctx) {
         }
 
         ret = xnet_poll_wait(poll, timeout);
+
         if (ret < 0) {
             //have error?
             printf("xnet_poll_wait error:%d\n", ret);

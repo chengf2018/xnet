@@ -44,12 +44,8 @@ call_lua_stop(lua_State *L, xnet_context_t *ctx) {
 static void
 listen_func(xnet_context_t *ctx, int sock_id, int acc_sock_id) {
 	xnet_socket_t *ns = xnet_get_socket(ctx, acc_sock_id);
-    char addr_str[64] = {0};
     lua_State *L = ctx->user_ptr;
 
-    xnet_addrtoa(&ns->addr_info, addr_str);
-	xnet_error(ctx, "-----socket [%d] accept new, new socket:[%d], [%s]", sock_id, acc_sock_id, addr_str);
-	
 	int ftype = lua_getfield(L, LUA_REGISTRYINDEX, "reg_funcs");
 	if (ftype != LUA_TTABLE) {
 		xnet_error(ctx, "reg_funcs is not a table %d", ftype);
@@ -70,7 +66,6 @@ listen_func(xnet_context_t *ctx, int sock_id, int acc_sock_id) {
 static void
 error_func(xnet_context_t *ctx, int sock_id, short what) {
 	lua_State *L = ctx->user_ptr;
-	xnet_error(ctx, "-----socket [%d] error, what:[%u]", sock_id, what);
 	xnet_socket_t *s = xnet_get_socket(ctx, sock_id);
 	if (s->unpacker) {
 		xnet_unpacker_free(s->unpacker);
@@ -128,7 +123,6 @@ recv_func(xnet_context_t *ctx, int sock_id, char *buffer, int size, xnet_addr_t 
 static void
 timeout_func(xnet_context_t *ctx, int id) {
 	lua_State *L = ctx->user_ptr;
-    xnet_error(ctx, "timeout event[%d], nowtime:%llu", id, ctx->nowtime);
     int ftype = lua_getfield(L, LUA_REGISTRYINDEX, "reg_funcs");
     if (ftype != LUA_TTABLE) {
     	xnet_error(ctx, "reg_funcs is not a table %d", ftype);
@@ -167,8 +161,6 @@ command_func(xnet_context_t *ctx, xnet_context_t *source, int command, void *dat
 
 static void
 connect_func(struct xnet_context_t *ctx, int sock_id, int error) {
-	xnet_error(ctx, "-----socket [%d] connected. error:[%d]", sock_id, error);
-
 	lua_State *L = ctx->user_ptr;
 	int ftype = lua_getfield(L, LUA_REGISTRYINDEX, "reg_funcs");
 	if (ftype != LUA_TTABLE) {

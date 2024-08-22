@@ -8,12 +8,12 @@ local socket_list = { }
 function Start()
 	print("lua start!")
 	local port = xnet.get_env("port") or 9090
-	local rc, sock = xnet.tcp_listen("0.0.0.0", port, 5);
+	local rc, sock = xnet.tcp_listen("0.0.0.0", port, 5)
 	print("lua tcp_listen", rc, sock, port)
 	print(xnet.get_env("luabooter"))
 	print(xnet.get_env("log_path"))
 
-	xnet.add_timer(1, 1000);
+	xnet.add_timer(1, 1000)
 	xnet.register({
 		listen = function(sid, new_sid, addr)
 			print("----lua: new connection", sid, new_sid, xnet.addrtoa(addr))

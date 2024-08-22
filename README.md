@@ -30,14 +30,21 @@ xnet.register({
 ```
 
 ### packer机制
-
-可以给连接注册解包方法，例如注册http解包方法，只需要在listen事件中给连接注册解包方式即可，内置了3种解包方式，分别是：http、sizebuffer(4字节长度+实际内容)、line（单行文本）。例如注册一个http解包方法，可以这样：
+packer机制可以给连接注册解包方法，例如注册http解包方法，只需要在listen事件中给连接注册解包方式即可，内置了3种解包方式，分别是：http、sizebuffer(4字节长度+实际内容)、line（单行文本）。例如注册一个http解包方法，可以这样：
 ```
 listen = function(sid, ns, addr)
 	xnet.register_packer(ns, xnet.PACKER_TYPE_HTTP)
 end,
 ```
 同时，lualib/pack.lua中也提供了相应的封包方法，详细可以查看该代码文件以及luaexample。
+
+### 定时器
+xnet支持定时器机制，例如，可以用以下接口注册id为1，超时时间为1000毫秒的定时器。
+```
+xnet.add_timer(1, 1000)
+```
+此方法注册的定时事件是一次性的，如果你想持续触发定时事件，可以在定时事件触发后再调用一次xnet.add_timer。
+xnet不支持取消已经注册的定时事件，但是lua层通过timer提供了一层简单的封装，可以进行定时器的取消。详细可以查看luaexample/timeout.lua。
 
 ## xnet配置
 启动xnet需要提供一个配置文件，配置文件示例如下：

@@ -144,7 +144,7 @@ poll_wait(xnet_poll_t *poll, int timeout) {
     int have_read, have_write, have_error;
     xnet_socket_t *s;
     fd_set readfds, writefds, errorfds;
-    struct timeval tv;
+    struct timeval tv = {0, 0};
 
     if (timeout > 0) {
         tv.tv_sec = timeout / 1000;
@@ -155,7 +155,7 @@ poll_wait(xnet_poll_t *poll, int timeout) {
     writefds = poll->writefds;
     errorfds = poll->errorfds;
     activity = select(0, &readfds,&writefds, &errorfds,
-        (timeout > 0) ? &tv : NULL);
+        (timeout < 0) ? NULL : &tv);
     if (activity == -1)
         return -1;
 
