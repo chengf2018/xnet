@@ -71,6 +71,11 @@ static void
 error_func(xnet_context_t *ctx, int sock_id, short what) {
 	lua_State *L = ctx->user_ptr;
 	xnet_error(ctx, "-----socket [%d] error, what:[%u]", sock_id, what);
+	xnet_socket_t *s = xnet_get_socket(ctx, sock_id);
+	if (s->unpacker) {
+		xnet_unpacker_free(s->unpacker);
+		s->unpacker = NULL;
+	}
 
 	int ftype = lua_getfield(L, LUA_REGISTRYINDEX, "reg_funcs");
 	if (ftype != LUA_TTABLE) {

@@ -15,23 +15,23 @@ function Start()
 
 	xnet.add_timer(1, 1000);
 	xnet.register({
-		listen = function(s, ns, addr)
-			print("----lua: new connection", s, ns, xnet.addrtoa(addr))
+		listen = function(sid, ns, addr)
+			print("----lua: new connection", sid, ns, xnet.addrtoa(addr))
 			socket_list[ns] = ns
 			xnet.register_packer(ns, xnet.PACKER_TYPE_HTTP)
 		end,
-		error = function(s, what)
-			print("----lua: error", s, what)
+		error = function(sid, what)
+			print("----lua: error", sid, what)
 			socket_list[ns] = nil
 		end,
-		recv = function(s, pkg_type, pkg, sz, addr)
-			print("----lua: recv", s, pkg_type, pkg, sz, xnet.addrtoa(addr))
+		recv = function(sid, pkg_type, pkg, sz, addr)
+			print("----lua: recv", sid, pkg_type, pkg, sz, xnet.addrtoa(addr))
 			if type(pkg) == "table" then
 				util.dump_table(pkg)
 				local msg = pack.pack_http(200, nil, "hello world")
-				xnet.tcp_send_buffer(s, msg)
-				print("tcp_send_buffer", s, string.len(msg))
-				xnet.close_socket(s)
+				xnet.tcp_send_buffer(sid, msg)
+				print("tcp_send_buffer", sid, string.len(msg))
+				xnet.close_socket(sid)
 			end
 		end,
 		timeout = function(id)
@@ -41,8 +41,8 @@ function Start()
 		command = function(source, command, data, sz)
 			print("----lua:command", source, command, sz)
 		end,
-		connected = function(s, err)
-			print("----lua:connected", s, err)
+		connected = function(sid, err)
+			print("----lua:connected", sid, err)
 		end,
 
 	})
