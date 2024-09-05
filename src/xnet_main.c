@@ -7,7 +7,6 @@
 #include "lua_binding.h"
 
 
-
 typedef struct {
     xnet_init_config_t init;
     char *luabooter;

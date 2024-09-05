@@ -1,3 +1,5 @@
+#include "xnet_util.h"
+
 #define GET_XNET_CTX xnet_context_t *ctx;            \
 lua_getfield((L), LUA_REGISTRYINDEX, "xnet_ctx");    \
 ctx = lua_touserdata((L), -1);                       \
@@ -422,8 +424,8 @@ _xnet_error(lua_State *L) {
 
 static int
 _xnet_now(lua_State *L) {
-	GET_XNET_CTX
-	lua_pushinteger(L, ctx->nowtime);
+	uint64_t nowtime = get_time();
+	lua_pushinteger(L, nowtime);
 	return 1;
 }
 
