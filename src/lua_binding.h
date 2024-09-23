@@ -344,7 +344,7 @@ _register_packer(lua_State *L) {
 			up = xnet_unpacker_new(sizeof(xnet_httprequest_t), http_callback, xnet_unpack_http, xnet_clear_http, 1024);
 		break;
 		case XNET_PACKER_TYPE_SIZEBUFFER:
-			up = xnet_unpacker_new(sizeof(xnet_sizebuffer_t), sizebuffer_callback, xnet_unpack_sizebuffer, xnet_clear_sizebuffer, 65535);
+			up = xnet_unpacker_new(sizeof(xnet_sizebuffer_t), sizebuffer_callback, xnet_unpack_sizebuffer, xnet_clear_sizebuffer, 0xFFFFFFFF);
 		break;
 		case XNET_PACKER_TYPE_LINE:
 			up = xnet_unpacker_new(sizeof(xnet_linebuffer_t), linebuffer_callback, xnet_unpack_line, xnet_clear_line, 1024);

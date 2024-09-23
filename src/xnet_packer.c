@@ -567,7 +567,7 @@ xnet_clear_http_rsp(xnet_httpresponse_t *rsp) {
 
 
 static uint32_t
-read_size(char header[BUFFER_HEADER_SIZE]) {
+read_size(unsigned char header[BUFFER_HEADER_SIZE]) {
 	uint32_t sz =   (header[0])
 				  | (header[1] << 8)
 				  | (header[2] << 16)
@@ -599,7 +599,7 @@ xnet_unpack_sizebuffer(xnet_unpacker_t *up, const char *buffer, uint32_t sz) {
 			fill_size = BUFFER_HEADER_SIZE - sb->recv_len;
 			memcpy(sb->header+sb->recv_len, buffer, fill_size);
 			sb->recv_len += fill_size;
-			sb->buffer_size = read_size(sb->header);
+			sb->buffer_size = read_size((unsigned char*)sb->header);
 			sz -= fill_size;
 			if (sz == 0) return fill_size;
 			buffer += fill_size;
