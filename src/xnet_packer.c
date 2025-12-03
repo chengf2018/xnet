@@ -288,6 +288,11 @@ parse_request(xnet_httprequest_t *req, const char *buffer, uint32_t sz, uint32_t
 				if (xnet_string_compare_cs(&req->method, "POST") == 0) {
 					state = HTTP_STATE_BODY;
 					subState = 0;
+					if (req->content_length == 0) {
+						state = HTTP_STATE_DONE;
+						subState = 0;
+						goto _out;
+					}
 				} else {
 					state = HTTP_STATE_DONE;
 					subState = 0;
@@ -330,6 +335,7 @@ xnet_unpack_http(xnet_unpacker_t *up, const char *buffer, uint32_t sz) {
 	int ret;
 
 	ret = parse_request(req, buffer, sz, up->limit);
+
 	if (ret == -1) {
 		//bad request
 		if (req->code == 0) req->code = 400;
